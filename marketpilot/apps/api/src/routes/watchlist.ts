@@ -16,6 +16,10 @@ router.post('/', async (req: AuthRequest, res, next) => {
   } catch (e) { next(e); }
 });
 router.delete('/:symbol', async (req: AuthRequest, res, next) => {
-  try { await prisma.watchlistItem.deleteMany({ where: { userId: req.user!.id, symbol: req.params.symbol.toUpperCase() } }); res.status(204).end(); } catch (e) { next(e); }
+  try {
+    const symbol = String(req.params.symbol).toUpperCase();
+    await prisma.watchlistItem.deleteMany({ where: { userId: req.user!.id, symbol } });
+    res.status(204).end();
+  } catch (e) { next(e); }
 });
 export default router;
