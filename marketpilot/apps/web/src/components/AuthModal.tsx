@@ -16,7 +16,7 @@ import {
   KeyRound,
   ArrowLeft
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, setToken } from '../lib/api';
 import type { User } from '../types';
 
 interface AuthModalProps {
@@ -75,11 +75,14 @@ export function AuthModal({ isOpen, onClose, onSuccess, defaultMode = 'login' }:
         payload = { email: email.trim(), newPassword: password };
       }
 
-      // Cookies are handled via httpOnly cookies automatically by the browser
-      const data = await api<{ user: User; message?: string }>(endpoint, {
+      const data = await api<{ user: User; token?: string; message?: string }>(endpoint, {
         method: 'POST',
         body: JSON.stringify(payload)
       });
+
+      if (data.token) {
+        setToken(data.token);
+      }
 
       onSuccess(data.user);
       onClose();

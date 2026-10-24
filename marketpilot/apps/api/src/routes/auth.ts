@@ -67,6 +67,7 @@ router.post('/register', async (req, res, next) => {
     res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);
 
     res.status(201).json({
+      token,
       user,
       message: 'Account created successfully.'
     });
@@ -110,6 +111,7 @@ router.post('/login', async (req, res, next) => {
     };
 
     res.json({
+      token,
       user,
       message: 'Signed in successfully.'
     });
@@ -153,6 +155,7 @@ router.post('/reset-password', async (req, res, next) => {
     res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);
 
     res.json({
+      token,
       user: updated,
       message: 'Password reset successfully. You are now logged in.'
     });

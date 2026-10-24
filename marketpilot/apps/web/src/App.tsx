@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ArrowUpRight, Command, X } from 'lucide-react';
-import { api } from './lib/api';
+import { api, setToken } from './lib/api';
 import type { Stock, User, JournalEntry } from './types';
 
 import { Sidebar } from './components/Sidebar';
@@ -71,6 +71,7 @@ function AppLayout() {
       })
       .catch(() => {
         setUser(null);
+        setToken(null);
       });
   }, []);
 
@@ -139,6 +140,7 @@ function AppLayout() {
   }
 
   async function handleLogout() {
+    setToken(null);
     try {
       await api('/auth/logout', { method: 'POST' });
     } catch {}

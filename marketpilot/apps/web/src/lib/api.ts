@@ -1,15 +1,22 @@
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://localhost:4000/api';
 
-/**
- * Clean legacy localStorage token if present
- */
+const TOKEN_KEY = 'mp_auth_token';
+
 export function getToken(): string | null {
-  return null;
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
 
-export function setToken(_token: string | null) {
+export function setToken(token: string | null) {
   try {
-    localStorage.removeItem('mp_token');
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+    }
   } catch {}
 }
 
@@ -19,10 +26,16 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     headers.set('Content-Type', 'application/json');
   }
 
+  // Include Bearer token as cross-site fallback (protects when browsers block 3rd-party cookies across vercel.app & onrender.com)
+  const token = getToken();
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
-    credentials: 'include'
+    credentials: 'include' // Still sends and receives httpOnly cookies where supported
   });
 
   if (!response.ok) {

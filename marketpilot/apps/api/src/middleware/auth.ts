@@ -15,10 +15,12 @@ const secret = () => {
 
 export const COOKIE_NAME = 'mp_token';
 
+const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+
 export const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: (process.env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
+  secure: isProduction,
+  sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   path: '/'
 };
