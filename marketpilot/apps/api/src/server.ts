@@ -12,6 +12,7 @@ import journalRoutes from './routes/journal.js';
 import { prisma } from './db.js';
 const app = express();
 const port = Number(process.env.PORT || 4000);
+app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(helmet());
 
@@ -25,7 +26,8 @@ app.use(cors({
     if (
       configuredOrigins.includes(origin) ||
       /^http:\/\/localhost(:\d+)?$/.test(origin) ||
-      /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)
+      /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin) ||
+      /\.vercel\.app$/.test(origin)
     ) {
       return callback(null, true);
     }
