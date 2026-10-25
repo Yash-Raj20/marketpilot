@@ -27,7 +27,11 @@ A professionally structured starter for an Indian-market intelligence SaaS: resp
 7. Start web and API: `npm run dev`
 8. Open `http://localhost:5173`. API health: `http://localhost:4000/api/health`.
 
-Demo account (only after seed): `demo@marketpilot.local` / `DemoPass!234`. Change/remove this account before deployment. Passwords are hashed.
+Demo accounts (only after seed):
+- **Super Admin:** `admin@marketpilot.local` / `AdminPass!234` (Full `/admin` Portal Access)
+- **Demo Trader:** `demo@marketpilot.local` / `DemoPass!234` (Regular User Dashboard)
+
+Change/remove these accounts before deployment. Passwords are hashed.
 
 ## Mobile setup
 1. Install Flutter and create platform folders if needed: `cd apps/mobile && flutter create .` (keep the provided `lib/` files).
@@ -36,6 +40,7 @@ Demo account (only after seed): `demo@marketpilot.local` / `DemoPass!234`. Chang
 4. Run `flutter run --dart-define=API_BASE_URL=http://10.0.2.2:4000/api` on Android emulator.
 
 ## API overview
+### User Endpoints
 - `GET /api/health`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
@@ -47,6 +52,19 @@ Demo account (only after seed): `demo@marketpilot.local` / `DemoPass!234`. Chang
 - `DELETE /api/watchlist/:symbol`
 - `GET /api/journal` (Bearer token)
 - `POST /api/journal` `{ "symbol":"TCS", "side":"BUY", "entryPrice":3500, "quantity":1, "notes":"Practice entry" }`
+
+### Admin Endpoints (`/api/admin/*`, Bearer token + ADMIN role required)
+- `GET /api/admin/stats` — Platform KPIs, MRR, User counts, Subscriptions breakdown, Audit events
+- `GET /api/admin/users?search=&role=&plan=&status=` — Search and paginate users with activity counts
+- `POST /api/admin/users` — Directly provision new user or admin account
+- `GET /api/admin/users/:id` — Full user detail, watchlists, trades, and audit history
+- `PATCH /api/admin/users/:id` — Update name, email, and toggle role (`USER` <-> `ADMIN`)
+- `PATCH /api/admin/users/:id/subscription` — Override user plan (`FREE` / `PRO` / `ELITE`), status, validity days
+- `DELETE /api/admin/users/:id` — Permanently delete user and cascade associated data
+- `GET /api/admin/journal` — Platform-wide trade feed across all traders
+- `GET /api/admin/audit-logs` — Immutable security trail & audit logs
+- `GET /api/admin/alerts` & `POST /api/admin/alerts` — Manage broadcast alerts displayed across user website
+- `GET /api/admin/alerts/active` — Active platform broadcast banners visible to users
 
 ## Production checklist
 - Use managed PostgreSQL, TLS, secret manager, backups and restore drills.

@@ -1,106 +1,120 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 
-export interface DropdownOption<T extends string> {
-  value: T;
+export interface Option {
+  value: string;
   label: string;
   badge?: string;
-  icon?: React.ReactNode;
+  badgeColor?: string;
+  icon?: any;
 }
 
-interface CustomSelectProps<T extends string> {
-  value: T;
-  options: DropdownOption<T>[];
-  onChange: (val: T) => void;
-  icon?: React.ReactNode;
-  minWidth?: string | number;
+interface CustomSelectProps {
+  value: string;
+  onChange: (value: string) => void;
+  options: Option[];
+  placeholder?: string;
+  label?: string;
+  icon?: any;
+  className?: string;
+  style?: React.CSSProperties;
+  minWidth?: number | string;
+  disabled?: boolean;
 }
 
-export function CustomSelect<T extends string>({
+export function CustomSelect({
   value,
-  options,
   onChange,
-  icon,
-  minWidth = 160
-}: CustomSelectProps<T>) {
+  options,
+  placeholder = 'Select option...',
+  label,
+  icon: Icon,
+  className = '',
+  style,
+  minWidth,
+  disabled = false
+}: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const selectedOption = options.find(o => o.value === value) || options[0];
+  const selectedOption = options.find(opt => opt.value === value);
 
+  // Close dropdown when clicking outside
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     }
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && isOpen) {
-        setIsOpen(false);
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
   return (
     <div 
-      className="custom-dropdown-container" 
+      className={`custom-select-container ${className} ${disabled ? 'disabled' : ''}`} 
       ref={containerRef}
-      style={{ minWidth }}
+      style={{ minWidth: typeof minWidth === 'number' ? `${minWidth}px` : minWidth, ...style }}
     >
+      {label && <label className="custom-select-label">{label}</label>}
+      
       <button
         type="button"
-        className={`custom-dropdown-trigger ${isOpen ? 'active-open' : ''}`}
-        onClick={() => setIsOpen(!isOpen)}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
+        className={`custom-select-trigger ${isOpen ? 'open' : ''}`}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        disabled={disabled}
       >
-        {icon && <span className="dropdown-trigger-icon">{icon}</span>}
-        <span className="dropdown-trigger-label">{selectedOption?.label || value}</span>
-        <ChevronDown 
-          size={14} 
-          className={`dropdown-trigger-chevron ${isOpen ? 'rotated' : ''}`} 
-        />
+        <div className="trigger-left">
+          {Icon && <Icon size={14} className="trigger-icon" />}
+          <span className="trigger-text">
+            {selectedOption ? selectedOption.label : (value ? value : placeholder)}
+          </span>
+          {selectedOption?.badge && (
+            <span 
+              className="trigger-badge"
+              style={selectedOption.badgeColor ? { color: selectedOption.badgeColor, borderColor: selectedOption.badgeColor } : undefined}
+            >
+              {selectedOption.badge}
+            </span>
+          )}
+        </div>
+        <ChevronDown size={14} className={`trigger-chevron ${isOpen ? 'rotate' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="custom-dropdown-menu" role="listbox">
-          {options.map((option) => {
-            const isSelected = option.value === value;
-            return (
-              <div
-                key={option.value}
-                role="option"
-                aria-selected={isSelected}
-                className={`custom-dropdown-item ${isSelected ? 'selected' : ''}`}
-                onClick={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-              >
-                {option.icon && (
-                  <span className="dropdown-item-icon">{option.icon}</span>
-                )}
-                <span className="dropdown-item-text">{option.label}</span>
-                {option.badge && (
-                  <span className="dropdown-item-badge">{option.badge}</span>
-                )}
-                {isSelected && (
-                  <Check size={14} className="dropdown-check-icon" />
-                )}
-              </div>
-            );
-          })}
+        <div className="custom-select-dropdown">
+          <div className="custom-select-options">
+            {options.map((opt) => {
+              const isSelected = opt.value === value;
+              const OptIcon = opt.icon;
+              return (
+                <div
+                  key={opt.value}
+                  className={`custom-select-option ${isSelected ? 'selected' : ''}`}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setIsOpen(false);
+                  }}
+                >
+                  <div className="option-content">
+                    {OptIcon && <OptIcon size={14} className="option-icon" />}
+                    <span className="option-label">{opt.label}</span>
+                    {opt.badge && (
+                      <span 
+                        className="option-badge"
+                        style={opt.badgeColor ? { color: opt.badgeColor, borderColor: opt.badgeColor } : undefined}
+                      >
+                        {opt.badge}
+                      </span>
+                    )}
+                  </div>
+                  {isSelected && <Check size={14} className="option-check" />}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

@@ -7,6 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
 enum JournalSide {
   BUY
   SELL
@@ -25,6 +30,7 @@ model User {
   name         String
   email        String          @unique
   passwordHash String
+  role         Role            @default(USER)
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   watchlist    WatchlistItem[]
@@ -33,6 +39,7 @@ model User {
   auditEvents  AuditEvent[]
 
   @@index([createdAt])
+  @@index([role])
 }
 
 model WatchlistItem {
@@ -84,4 +91,16 @@ model AuditEvent {
 
   @@index([createdAt])
   @@index([userId, createdAt])
+}
+
+model PlatformAlert {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  severity  String   @default("info")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
 }

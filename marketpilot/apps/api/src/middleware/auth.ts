@@ -45,14 +45,28 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   }
 
   try {
-    const payload = jwt.verify(token, secret()) as { sub: string; email: string };
-    req.user = { id: payload.sub, email: payload.email };
+    const payload = jwt.verify(token, secret()) as { sub: string; email: string; role?: 'USER' | 'ADMIN' };
+    req.user = { id: payload.sub, email: payload.email, role: payload.role || 'USER' };
     next();
   } catch {
     return res.status(401).json({ error: 'Session expired or token is invalid. Please sign in again.' });
   }
 }
 
-export function createToken(user: { id: string; email: string }) {
-  return jwt.sign({ email: user.email }, secret(), { subject: user.id, expiresIn: '7d' });
+export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  requireAuth(req, res, () => {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Admin access required. You do not have permission to view or manage this resource.' });
+    }
+    next();
+  });
 }
+
+export function createToken(user: { id: string; email: string; role?: string }) {
+  return jwt.sign(
+    { email: user.email, role: user.role || 'USER' },
+    secret(),
+    { subject: user.id, expiresIn: '7d' }
+  );
+}
+

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Command, X } from 'lucide-react';
 import { api, setToken } from './lib/api';
-import type { Stock, User, JournalEntry } from './types';
+import type { Stock, User, JournalEntry, PlatformAlert } from './types';
 
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { AuthModal } from './components/AuthModal';
+import { AlertStack } from './components/AlertStack';
 
 import { HomePage } from './pages/HomePage';
 import { OverviewPage } from './pages/OverviewPage';
@@ -16,6 +17,7 @@ import { JournalPage } from './pages/JournalPage';
 import { RiskStudioPage } from './pages/RiskStudioPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { PlansPage } from './pages/PlansPage';
+import { AdminPage } from './pages/AdminPage';
 
 const fallbackStocks: Stock[] = [
   { symbol: 'NIFTY 50', name: 'Nifty 50 Index', price: 24872.3, changePct: 0.64, category: 'Index', volume: '34.2M', rsi: 62 },
@@ -50,7 +52,9 @@ function AppLayout() {
   const [toast, setToast] = useState('');
   const [mobileMenu, setMobileMenu] = useState(false);
   const [journal, setJournal] = useState<JournalEntry[]>([]);
+  const [activeAlerts, setActiveAlerts] = useState<PlatformAlert[]>([]);
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     // 1. Fetch market stocks from API
@@ -58,7 +62,12 @@ function AppLayout() {
       .then(d => setStocks(d.results))
       .catch(() => {});
 
-    // 2. Fetch authenticated user data using httpOnly cookie session
+    // 2. Fetch active platform announcements/alerts
+    api<{ alerts: PlatformAlert[] }>('/admin/alerts/active')
+      .then(d => setActiveAlerts(d.alerts || []))
+      .catch(() => {});
+
+    // 3. Fetch authenticated user data using httpOnly cookie session
     api<{ user: User }>('/auth/me')
       .then(d => {
         setUser(d.user);
@@ -148,6 +157,7 @@ function AppLayout() {
     setWatchlist(['RELIANCE', 'INFY', 'HDFCBANK']);
     setJournal([]);
     setToast('Signed out successfully');
+    navigate('/');
   }
 
   // Titles for page banner
@@ -171,6 +181,37 @@ function AppLayout() {
     path === '/plans' ? 'Choose the tier that matches your trading workflow.' :
     'Build better habits with a repeatable trading process.';
 
+  const isAdmin = user?.role === 'ADMIN';
+  const isAdminPath = location.pathname.startsWith('/admin');
+
+  // When visiting /admin without being an authenticated Admin,
+  // render ONLY the Admin Login form (no sidebar, no topbar, no main dashboard shell)
+  if (isAdminPath && !isAdmin) {
+    return (
+      <div className="admin-login-fullscreen">
+        <AdminPage
+          currentUser={user}
+          onUserUpdate={(u) => {
+            setUser(u);
+            if (u?.role === 'ADMIN') {
+              navigate('/admin/overview');
+            }
+          }}
+          onShowToast={setToast}
+        />
+        {toast && (
+          <div className="toast">
+            <span className="toast-check">✓</span>
+            {toast}
+            <button onClick={() => setToast('')} aria-label="Dismiss toast">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -189,35 +230,46 @@ function AppLayout() {
           onOpenAuth={() => setAuthOpen(true)}
           onShowToast={setToast}
           onLogout={handleLogout}
+          activeAlerts={activeAlerts}
         />
 
         <div className="content-wrap">
-          <div className="welcome-row">
-            <div>
-              <div className="eyebrow">
-                <span className="eyebrow-dot" /> YOUR MARKET COMMAND CENTRE
-              </div>
-              <h1>
-                {heading}<span className="heading-period">.</span>
-                {(isHome || path === '/overview') && <span className="wave"> ✦</span>}
-              </h1>
-              <p className="subhead">{subhead}</p>
-            </div>
-            <div className="date-pill">
-              <Command size={15} /> Live Workspace <span className="date-sep" /> <span>Market session</span>
-            </div>
-          </div>
+          {/* Active Platform Broadcast Alert Stack (Layered Deck) */}
+          <AlertStack
+            alerts={activeAlerts}
+            onDismiss={(id) => setActiveAlerts(prev => prev.filter(a => a.id !== id))}
+          />
 
-          <div className="demo-alert">
-            <div className="alert-symbol">i</div>
-            <div>
-              <strong>Preview environment</strong>
-              <span> All stock prices and charts are simulated sample data, not live exchange quotes.</span>
-            </div>
-            <button onClick={() => setToast('Connect a licensed market data provider before production launch.')}>
-              Learn more <ArrowUpRight size={13} />
-            </button>
-          </div>
+          {!path.startsWith('/admin') && (
+            <>
+              <div className="welcome-row">
+                <div>
+                  <div className="eyebrow">
+                    <span className="eyebrow-dot" /> YOUR MARKET COMMAND CENTRE
+                  </div>
+                  <h1>
+                    {heading}<span className="heading-period">.</span>
+                    {(isHome || path === '/overview') && <span className="wave"> ✦</span>}
+                  </h1>
+                  <p className="subhead">{subhead}</p>
+                </div>
+                <div className="date-pill">
+                  <Command size={15} /> Live Workspace <span className="date-sep" /> <span>Market session</span>
+                </div>
+              </div>
+
+              <div className="demo-alert">
+                <div className="alert-symbol">i</div>
+                <div>
+                  <strong>Preview environment</strong>
+                  <span> All stock prices and charts are simulated sample data, not live exchange quotes.</span>
+                </div>
+                <button onClick={() => setToast('Connect a licensed market data provider before production launch.')}>
+                  Learn more <ArrowUpRight size={13} />
+                </button>
+              </div>
+            </>
+          )}
 
           <Routes>
             <Route path="/" element={<HomePage user={user} stocks={stocks} onOpenAuth={() => setAuthOpen(true)} />} />
@@ -290,6 +342,19 @@ function AppLayout() {
                 />
               }
             />
+            {/* Admin Routes */}
+            <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
+            <Route
+              path="/admin/:tab"
+              element={
+                <AdminPage
+                  currentUser={user}
+                  onUserUpdate={setUser}
+                  onShowToast={setToast}
+                />
+              }
+            />
+
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
 
@@ -307,6 +372,9 @@ function AppLayout() {
         onSuccess={(u) => {
           setUser(u);
           setToast(`Welcome back, ${u.name}!`);
+          if (u.role === 'ADMIN') {
+            navigate('/admin/overview');
+          }
           api<{ items: { symbol: string }[] }>('/watchlist')
             .then(d => setWatchlist(d.items.map(i => i.symbol)))
             .catch(() => {});

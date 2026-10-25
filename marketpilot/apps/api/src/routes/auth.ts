@@ -11,11 +11,13 @@ const USER_PROJECTION = {
   id: true,
   name: true,
   email: true,
+  role: true,
   createdAt: true,
   subscription: {
     select: {
       plan: true,
-      status: true
+      status: true,
+      currentPeriodEnd: true
     }
   }
 } as const;
@@ -106,6 +108,7 @@ router.post('/login', async (req, res, next) => {
       id: userWithHash.id,
       name: userWithHash.name,
       email: userWithHash.email,
+      role: userWithHash.role,
       createdAt: userWithHash.createdAt,
       subscription: userWithHash.subscription
     };
