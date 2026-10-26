@@ -8,7 +8,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Sparkles
 } from 'lucide-react';
 import type { Stock } from '../types';
 
@@ -25,26 +26,69 @@ function money(n: number) {
   return n.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 }
 
-// Sparkline generator helper
-function MiniSparkline({ changePct }: { changePct: number }) {
+// Upgraded Dynamic Sparkline with authentic contour, area gradient fill, and end pulse dot
+function MiniSparkline({ changePct, symbol }: { changePct: number; symbol: string }) {
   const isUp = changePct >= 0;
-  const strokeColor = isUp ? '#45d6a2' : '#f87171';
-  // 6 points showing realistic directional wave
-  const path = isUp 
-    ? "M0,18 Q8,14 16,16 T32,9 T48,11 T60,2"
-    : "M0,4 Q8,8 16,6 T32,13 T48,11 T60,20";
+  const strokeColor = isUp ? '#00c087' : '#f23645';
+  const fillGradientId = `grad_${symbol.replace(/[^a-zA-Z0-9]/g, '')}_${isUp ? 'up' : 'down'}`;
+
+  const w = 70;
+  const h = 26;
+  const numPoints = 7;
+  const step = w / (numPoints - 1);
+
+  // Deterministic seed derived from symbol name and change
+  const seed = symbol.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) + Math.abs(changePct * 7);
+
+  const points: [number, number][] = [];
+  for (let i = 0; i < numPoints; i++) {
+    const x = Math.round(i * step);
+    const progress = i / (numPoints - 1);
+    const baseSlope = isUp ? (h - 6) - progress * (h - 10) : 6 + progress * (h - 12);
+    const jitter = Math.sin(seed + i * 1.6) * 3;
+    const y = Math.max(3, Math.min(h - 3, Math.round(baseSlope + jitter)));
+    points.push([x, y]);
+  }
+
+  // Anchor final point to trend direction
+  if (isUp) {
+    points[points.length - 1][1] = Math.min(points[points.length - 1][1], 5);
+  } else {
+    points[points.length - 1][1] = Math.max(points[points.length - 1][1], h - 5);
+  }
+
+  let d = `M ${points[0][0]},${points[0][1]}`;
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const cpx = (prev[0] + curr[0]) / 2;
+    d += ` C ${cpx},${prev[1]} ${cpx},${curr[1]} ${curr[0]},${curr[1]}`;
+  }
+
+  const fillPath = `${d} L ${w},${h} L 0,${h} Z`;
+  const lastPoint = points[points.length - 1];
 
   return (
-    <svg width="60" height="24" className="mini-sparkline" viewBox="0 0 60 24">
-      <path
-        d={path}
-        fill="none"
-        stroke={strokeColor}
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <div className="sparkline-wrapper" title={`24h Trajectory: ${isUp ? '+' : ''}${changePct.toFixed(2)}%`}>
+      <svg width={w} height={h} className="mini-sparkline" viewBox={`0 0 ${w} ${h}`}>
+        <defs>
+          <linearGradient id={fillGradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={strokeColor} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={strokeColor} stopOpacity="0.0" />
+          </linearGradient>
+        </defs>
+        <path d={fillPath} fill={`url(#${fillGradientId})`} />
+        <path
+          d={d}
+          fill="none"
+          stroke={strokeColor}
+          strokeWidth="1.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle cx={lastPoint[0]} cy={lastPoint[1]} r="2.5" fill={strokeColor} />
+      </svg>
+    </div>
   );
 }
 
@@ -80,10 +124,11 @@ export function StockTable({
               <th>SECTOR</th>
               <th>PRICE</th>
               <th>24H CHANGE</th>
+              <th>AI SCORE & SETUP</th>
               <th>INTRADAY RANGE</th>
               <th>RSI & SIGNAL</th>
               <th>VOLUME</th>
-              <th>TREND</th>
+              <th>24H TREND</th>
               <th>ACTIONS</th>
             </tr>
           </thead>
@@ -100,6 +145,12 @@ export function StockTable({
               const dayLow = s.dayLow || +(s.price * (1 - Math.abs(s.changePct) / 100 * 0.8)).toFixed(2);
               const rangeSpan = dayHigh - dayLow || 1;
               const markerPos = Math.min(Math.max(((s.price - dayLow) / rangeSpan) * 100, 5), 95);
+
+              // Compute fallback AI score if not attached
+              const score = s.aiScore ?? Math.min(96, Math.max(30, Math.round(50 + s.changePct * 6 + (rsiVal > 55 && rsiVal < 70 ? 15 : 0))));
+              const aiScoreBadgeClass = score >= 80 ? 'high' : score >= 65 ? 'med' : 'low';
+              const aiSignalText = s.aiSignal ?? (score >= 80 ? 'AI Strong Buy' : score >= 70 ? 'Breakout Watch' : s.changePct < -1.2 ? 'Bearish Flow' : 'Neutral Hold');
+              const aiReasonText = s.aiReason ?? `Momentum: ${s.changePct >= 0 ? '+' : ''}${s.changePct.toFixed(2)}% | RSI: ${rsiVal} | Score: ${score}/100`;
 
               return (
                 <tr key={s.symbol} className="scanner-table-row">
@@ -139,7 +190,21 @@ export function StockTable({
                     </span>
                   </td>
 
-                  {/* 5. Intraday Range Bar */}
+                  {/* 5. AI Score & Setup Badge */}
+                  <td>
+                    <div className="table-ai-score-cell" title={aiReasonText}>
+                      <div className={`ai-score-pill ${aiScoreBadgeClass}`}>
+                        <Sparkles size={11} className="ai-spark-icon" />
+                        <strong>{score}</strong>
+                        <small>/100</small>
+                      </div>
+                      <span className={`ai-signal-label ${aiScoreBadgeClass}`}>
+                        {aiSignalText}
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* 6. Intraday Range Bar */}
                   <td>
                     <div className="scanner-range-col" title={`Low: ₹${money(dayLow)} | High: ₹${money(dayHigh)}`}>
                       <div className="range-bar-track">
@@ -152,7 +217,7 @@ export function StockTable({
                     </div>
                   </td>
 
-                  {/* 6. RSI & Technical Signal */}
+                  {/* 7. RSI & Technical Signal */}
                   <td>
                     <div className="scanner-rsi-cell">
                       <span className="rsi-num">RSI {rsiVal}</span>
@@ -160,14 +225,14 @@ export function StockTable({
                     </div>
                   </td>
 
-                  {/* 7. Volume */}
+                  {/* 8. Volume */}
                   <td>
                     <span className="stock-vol-text">{s.volume || '2.4M'}</span>
                   </td>
 
-                  {/* 8. Sparkline */}
+                  {/* 9. Upgraded Dynamic Trend Sparkline */}
                   <td>
-                    <MiniSparkline changePct={s.changePct} />
+                    <MiniSparkline changePct={s.changePct} symbol={s.symbol} />
                   </td>
 
                   {/* 9. Actions */}

@@ -5,11 +5,26 @@ import {
   fetchAllLiveMarketRows, 
   fetchLiveQuote, 
   fetchLiveChartPoints, 
+  fetchGlobalMarketTickers,
   type MarketItem,
-  type ChartPoint 
+  type ChartPoint,
+  type GlobalTickerItem
 } from '../services/liveMarket.js';
 
 const router = Router();
+
+/**
+ * GET /api/market/global-tickers
+ * Returns live prices for 23+ global assets with 3-row data structure
+ */
+router.get('/global-tickers', async (_req, res) => {
+  try {
+    const tickers = await fetchGlobalMarketTickers();
+    res.json({ tickers, asOf: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
 
 /**
  * GET /api/market/config

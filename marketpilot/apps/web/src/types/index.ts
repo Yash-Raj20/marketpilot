@@ -8,6 +8,10 @@ export interface Stock {
   rsi?: number;
   dayHigh?: number;
   dayLow?: number;
+  aiScore?: number;
+  aiSignal?: string;
+  aiReason?: string;
+  sparkline?: number[];
 }
 
 export interface User {

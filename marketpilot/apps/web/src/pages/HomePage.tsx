@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { useNavigate } from 'react-router-dom';
+import { GlobalMarketsTicker } from '../components/GlobalMarketsTicker';
 import type { Stock, User } from '../types';
 
 interface HomePageProps {
@@ -258,49 +259,16 @@ export function HomePage({ user, stocks = [], onOpenAuth }: HomePageProps) {
 
   return (
     <section className="landing-page">
-      {/* 1. Live Market Ticker Strip (Minimal Ribbon) */}
-      <div className="market-ticker-ribbon">
-        <div className="ticker-ribbon-inner">
-          <div className="ticker-chip">
-            <span className="ticker-dot green" />
-            <span className="ticker-name">NIFTY 50</span>
-            <strong>24,872.30</strong>
-            <span className="ticker-badge positive">+0.64%</span>
-          </div>
-
-          <div className="ticker-divider" />
-
-          <div className="ticker-chip">
-            <span className="ticker-dot green" />
-            <span className="ticker-name">BANK NIFTY</span>
-            <strong>52,180.40</strong>
-            <span className="ticker-badge positive">+0.92%</span>
-          </div>
-
-          <div className="ticker-divider" />
-
-          <div className="ticker-chip">
-            <span className="ticker-dot blue" />
-            <span className="ticker-name">INDIA VIX</span>
-            <strong>13.42</strong>
-            <span className="ticker-badge calm">-2.10% (Calm)</span>
-          </div>
-
-          <div className="ticker-divider" />
-
-          <div className="ticker-chip">
-            <span className="ticker-dot green" />
-            <span className="ticker-name">ADV / DEC</span>
-            <strong>32 : 18</strong>
-            <span className="ticker-badge positive">Bullish Breadth</span>
-          </div>
-
-          <div className="ticker-divider" />
-
-          <div className="ticker-chip ticker-live-status">
-            <span className="live-ping-dot" />
-            <span>NSE/BSE Simulated Stream</span>
-          </div>
+      {/* 1. Global Markets Live Section (Real-Time TradingView Feed at Top) */}
+      <div className="global-markets-container top-ticker">
+        <div className="global-markets-header">
+          <h2>Global Markets</h2>
+          <p>
+            Global stock market movements impact investor sentiment and confidence in the Indian stock market. Positive trends in major global indices often lead to increased investor optimism, driving up demand for Indian stocks and vice versa.
+          </p>
+        </div>
+        <div className="global-markets-ticker-card">
+          <GlobalMarketsTicker />
         </div>
       </div>
 
@@ -465,6 +433,7 @@ export function HomePage({ user, stocks = [], onOpenAuth }: HomePageProps) {
           </div>
         </div>
       </div>
+
 
       {/* 3. Minimal Trading Intelligence Dashboard Preview */}
       <div className="home-intel-section">

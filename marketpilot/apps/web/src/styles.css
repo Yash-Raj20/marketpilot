@@ -1739,19 +1739,20 @@ table {
 }
 
 thead th {
-    font-size: 8px;
-    letter-spacing: .9px;
+    font-size: 13.5px;
+    letter-spacing: .75px;
     font-weight: 700;
-    color: #718098;
-    padding: 15px 8px 11px;
-    border-bottom: 1px solid #243044
+    color: #e2e8f0;
+    padding: 16px 14px 13px;
+    border-bottom: 2px solid #243044;
+    text-transform: uppercase;
 }
 
 tbody td {
-    padding: 12px 8px;
+    padding: 14px 14px;
     border-bottom: 1px solid #1d2939;
-    font-size: 10px;
-    color: #a9b6c9
+    font-size: 14px;
+    color: #cbd5e1;
 }
 
 tbody tr:last-child td {
@@ -1765,20 +1766,20 @@ tbody tr:hover {
 .table-stock {
     display: flex;
     align-items: center;
-    gap: 9px
+    gap: 10px;
 }
 
 .mini-stock {
-    width: 27px;
-    height: 27px;
+    width: 32px;
+    height: 32px;
     display: grid;
     place-items: center;
     background: #192d45;
     color: #8dbaff;
     border-radius: 8px;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
-    flex-shrink: 0
+    flex-shrink: 0;
 }
 
 .mini-1 {
@@ -1804,18 +1805,18 @@ tbody tr:hover {
 .table-stock>div {
     display: flex;
     flex-direction: column;
-    gap: 3px
+    gap: 2px;
 }
 
 .table-stock strong {
-    font-size: 10px;
-    color: #e1e8f3;
-    font-weight: 600
+    font-size: 13.5px;
+    color: #f1f5f9;
+    font-weight: 700;
 }
 
 .table-stock small {
-    font-size: 9px;
-    color: #718098
+    font-size: 11.5px;
+    color: #94a3b8;
 }
 
 .star-btn {
@@ -2191,29 +2192,29 @@ tbody tr:hover {
 }
 
 .scanner-sector-badge {
-    font-size: 10px;
+    font-size: 11.5px;
     font-weight: 600;
-    padding: 3px 8px;
+    padding: 4px 9px;
     border-radius: 6px;
     background: #132236;
-    color: #8bb4e8;
+    color: #93c5fd;
     border: 1px solid #1c324e;
     white-space: nowrap;
 }
 
 .stock-price-text {
-    font: 700 13px Manrope, sans-serif;
-    color: #f1f5f9;
+    font: 700 14.5px 'JetBrains Mono', monospace;
+    color: #f8fafc;
 }
 
 .scanner-change-pill {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    font-size: 11px;
+    gap: 4px;
+    font-size: 12.5px;
     font-weight: 700;
-    padding: 3px 7px;
-    border-radius: 5px;
+    padding: 4px 8px;
+    border-radius: 6px;
     white-space: nowrap;
 }
 
@@ -2256,8 +2257,9 @@ tbody tr:hover {
 .range-labels {
     display: flex;
     justify-content: space-between;
-    font-size: 8.5px;
-    color: #65778d;
+    font-size: 11px;
+    color: #94a3b8;
+    font-family: 'JetBrains Mono', monospace;
 }
 
 .scanner-rsi-cell {
@@ -2268,16 +2270,16 @@ tbody tr:hover {
 }
 
 .rsi-num {
-    font-size: 10.5px;
+    font-size: 12.5px;
     font-weight: 700;
-    color: #b4c5db;
+    color: #cbd5e1;
 }
 
 .signal-badge {
-    font-size: 9px;
+    font-size: 11px;
     font-weight: 700;
-    padding: 2px 5px;
-    border-radius: 4px;
+    padding: 3px 7px;
+    border-radius: 5px;
 }
 
 .signal-badge.bull-signal {
@@ -2296,8 +2298,8 @@ tbody tr:hover {
 }
 
 .stock-vol-text {
-    font-size: 11px;
-    color: #7b8ea6;
+    font-size: 13px;
+    color: #cbd5e1;
     font-weight: 600;
 }
 
@@ -10021,4 +10023,487 @@ tbody tr:hover {
         right: 16px;
         padding: 8px 14px 8px 10px;
     }
+}
+
+/* ============================================================
+   GLOBAL MARKETS LIVE TRADINGVIEW TICKER SECTION
+   ============================================================ */
+.global-markets-container {
+    margin: 4px 0 32px 0;
+    width: 100%;
+}
+
+.global-markets-container.top-ticker {
+    margin-top: 0;
+    margin-bottom: 36px;
+}
+
+.global-markets-header {
+    margin-bottom: 12px;
+}
+
+.global-markets-header h2 {
+    font: 800 22px/1.25 'Manrope', sans-serif;
+    letter-spacing: -0.5px;
+    color: #f1f5f9;
+    margin: 0 0 6px 0;
+}
+
+.global-markets-header p {
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: #8fa0b5;
+    max-width: 900px;
+    margin: 0;
+}
+
+.global-markets-ticker-card {
+    background: #090e1a;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    overflow: hidden;
+    padding: 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 20px rgba(56, 189, 248, 0.05);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.global-markets-ticker-card:hover {
+    border-color: rgba(99, 102, 241, 0.35);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 25px rgba(99, 102, 241, 0.12);
+}
+
+/* ============================================================
+   3-ROW GLOBAL MARKETS TICKER (Exact Screenshot Match)
+   ============================================================ */
+.gm-ticker-outer-container {
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+    background: #090e1a;
+    display: flex;
+    user-select: none;
+}
+
+.gm-ticker-marquee-track {
+    display: flex;
+    width: max-content;
+    animation: gmTickerMarquee 65s linear infinite;
+    will-change: transform;
+}
+
+.gm-ticker-marquee-track:hover {
+    animation-play-state: paused;
+}
+
+@keyframes gmTickerMarquee {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+.gm-ticker-column {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 168px;
+    padding: 10px 18px 10px 16px;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    text-decoration: none;
+    transition: background 0.15s ease;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.gm-ticker-column:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+/* Row 1: Logo + Symbol Name */
+.gm-ticker-row-name {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 4px;
+}
+
+.gm-ticker-name-text {
+    font-size: 12px;
+    font-weight: 700;
+    color: #cbd5e1;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+}
+
+.gm-ticker-dot {
+    margin-left: 3px;
+    color: #64748b;
+    font-size: 13px;
+}
+
+.gm-logo-badge {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9.5px;
+    font-weight: 800;
+    color: #ffffff;
+    flex-shrink: 0;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.gm-logo-badge.btc { background: #f7931a; }
+.gm-logo-badge.hsi { background: #dc2626; }
+.gm-logo-badge.dax { background: #2563eb; }
+.gm-logo-badge.ftse { background: #0284c7; }
+.gm-logo-badge.sp500 { background: #e11d48; }
+.gm-logo-badge.nikkei { background: #1d4ed8; }
+.gm-logo-badge.dow { background: #0284c7; }
+.gm-logo-badge.nasdaq { background: #0d9488; }
+.gm-logo-badge.nifty { background: #16a34a; }
+.gm-logo-badge.banknifty { background: #9333ea; }
+.gm-logo-badge.sensex { background: #2563eb; }
+.gm-logo-badge.eth { background: #6366f1; }
+.gm-logo-badge.gold { background: #ca8a04; }
+.gm-logo-badge.silver { background: #64748b; }
+.gm-logo-badge.oil { background: #334155; }
+.gm-logo-badge.cac40 { background: #1e40af; }
+.gm-logo-badge.asx { background: #047857; }
+.gm-logo-badge.forex { background: #059669; }
+
+/* Row 2: Price */
+.gm-ticker-row-price {
+    font-size: 15px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', 'Roboto Mono', 'SF Mono', monospace;
+    line-height: 1.25;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    white-space: nowrap;
+}
+
+.gm-ticker-row-price.down {
+    color: #f23645;
+}
+
+.gm-ticker-row-price.up {
+    color: #f1f5f9;
+}
+
+.gm-ticker-row-price.neutral {
+    color: #f1f5f9;
+}
+
+.gm-ticker-sup-badge {
+    font-size: 9.5px;
+    font-weight: 800;
+    color: #c084fc;
+    vertical-align: super;
+}
+
+/* Row 3: Change and Change Percentage */
+.gm-ticker-row-change {
+    font-size: 11.5px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', 'Roboto Mono', 'SF Mono', monospace;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.gm-ticker-row-change.down {
+    color: #f23645;
+}
+
+.gm-ticker-row-change.up {
+    color: #00c087;
+}
+
+.tradingview-ticker-outer-wrap {
+    width: 100%;
+    min-height: 72px;
+    overflow: hidden;
+}
+
+.tradingview-widget-container {
+    width: 100% !important;
+}
+
+.tradingview-widget-container__widget {
+    width: 100% !important;
+    min-height: 72px;
+}
+
+.tradingview-widget-copyright {
+    display: none !important;
+}
+
+/* ============================================================
+   AI SCANNER INTELLIGENCE & SPARKLINE ENHANCEMENTS
+   ============================================================ */
+.preset-chip.ai-chip {
+    background: rgba(147, 51, 234, 0.12);
+    border-color: rgba(168, 85, 247, 0.35);
+    color: #d8b4fe;
+}
+
+.preset-chip.ai-chip:hover {
+    background: rgba(147, 51, 234, 0.22);
+    border-color: #a855f7;
+    color: #f3e8ff;
+}
+
+.preset-chip.ai-chip.active {
+    background: linear-gradient(135deg, #7e22ce, #9333ea);
+    border-color: #c084fc;
+    color: #ffffff;
+    box-shadow: 0 0 16px rgba(168, 85, 247, 0.35);
+}
+
+.preset-chip.green.active {
+    background: rgba(0, 192, 135, 0.2);
+    border-color: #00c087;
+    color: #45d6a2;
+}
+
+.preset-chip.red.active {
+    background: rgba(242, 54, 69, 0.2);
+    border-color: #f23645;
+    color: #f87171;
+}
+
+/* AI Scanner Banner */
+.scanner-ai-card {
+    background: linear-gradient(135deg, #0d1527 0%, #111e38 100%);
+    border: 1px solid rgba(168, 85, 247, 0.28);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 18px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 24px rgba(147, 51, 234, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.scanner-ai-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.scanner-ai-icon-bubble {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #9333ea, #6366f1);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 0 14px rgba(147, 51, 234, 0.4);
+}
+
+.scanner-ai-text {
+    flex: 1;
+}
+
+.scanner-ai-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+}
+
+.scanner-ai-title strong {
+    font-size: 14px;
+    color: #f8fafc;
+    letter-spacing: -0.2px;
+}
+
+.scanner-ai-pill {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: rgba(168, 85, 247, 0.18);
+    border: 1px solid rgba(168, 85, 247, 0.35);
+    color: #d8b4fe;
+    padding: 2px 7px;
+    border-radius: 999px;
+}
+
+.scanner-ai-text p {
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: #94a3b8;
+    margin: 0;
+}
+
+.scanner-ai-chips-strip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.scanner-ai-chip-stat {
+    display: flex;
+    flex-direction: column;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 4px 10px;
+}
+
+.scanner-ai-chip-stat small {
+    font-size: 10px;
+    color: #64748b;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.scanner-ai-chip-stat strong {
+    font-size: 12px;
+    color: #e2e8f0;
+}
+
+.scanner-ai-apply-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, #9333ea, #6366f1);
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(147, 51, 234, 0.35);
+    transition: all 0.15s ease;
+}
+
+.scanner-ai-apply-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(147, 51, 234, 0.5);
+}
+
+.scanner-ai-apply-btn.active {
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: none;
+}
+
+/* AI Score Table Column */
+.table-ai-score-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 110px;
+}
+
+.ai-score-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    width: fit-content;
+}
+
+.ai-score-pill strong {
+    font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.ai-score-pill small {
+    opacity: 0.7;
+    font-size: 9.5px;
+}
+
+.ai-score-pill.high {
+    background: rgba(0, 192, 135, 0.18);
+    border: 1px solid rgba(0, 192, 135, 0.4);
+    color: #45d6a2;
+}
+
+.ai-score-pill.med {
+    background: rgba(56, 189, 248, 0.16);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    color: #38bdf8;
+}
+
+.ai-score-pill.low {
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: #94a3b8;
+}
+
+.ai-signal-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.ai-signal-label.high {
+    color: #45d6a2;
+}
+
+.ai-signal-label.med {
+    color: #38bdf8;
+}
+
+.ai-signal-label.low {
+    color: #94a3b8;
+}
+
+/* Upgraded Sparkline styling */
+.sparkline-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 0;
+}
+
+.mini-sparkline {
+    overflow: visible;
+}
+
+/* Explicit Scanner Table Header & Row Legibility */
+.scanner-table thead th {
+    font-size: 13.5px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: #e2e8f0;
+    padding: 16px 14px 13px;
+    border-bottom: 2px solid #243044;
+    background: rgba(13, 21, 33, 0.95);
+    text-transform: uppercase;
+}
+
+.scanner-table-row td {
+    padding: 14px 14px;
+    font-size: 13.5px;
+    color: #cbd5e1;
+    border-bottom: 1px solid #1e293b;
+    vertical-align: middle;
+}
+
+.scanner-table-row:hover {
+    background: rgba(30, 41, 59, 0.45);
 }

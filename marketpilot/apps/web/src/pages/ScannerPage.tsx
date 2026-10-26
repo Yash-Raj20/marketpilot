@@ -29,8 +29,8 @@ interface ScannerPageProps {
   onToggleWatch: (symbol: string) => void;
 }
 
-type PresetFilter = 'all' | 'momentum' | 'breakout' | 'dip' | 'watchlist';
-type SortOption = 'change-desc' | 'change-asc' | 'price-desc' | 'price-asc' | 'symbol-asc';
+type PresetFilter = 'all' | 'ai-picks' | 'gainers' | 'losers' | 'momentum' | 'breakout' | 'dip' | 'watchlist';
+type SortOption = 'ai-desc' | 'change-desc' | 'change-asc' | 'rsi-desc' | 'rsi-asc' | 'price-desc' | 'price-asc' | 'symbol-asc';
 
 function money(n: number) {
   return n.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
@@ -129,8 +129,11 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
   }, [sectors, currentStocksList]);
 
   const sortOptions = useMemo(() => [
-    { value: 'change-desc' as const, label: '24h Gainers (High to Low)' },
-    { value: 'change-asc' as const, label: '24h Losers (Low to High)' },
+    { value: 'ai-desc' as const, label: '✨ AI Score (Highest First)' },
+    { value: 'change-desc' as const, label: '🔥 24h Gainers (High to Low)' },
+    { value: 'change-asc' as const, label: '🔻 24h Losers (Low to High)' },
+    { value: 'rsi-desc' as const, label: '⚡ RSI (Overbought Momentum)' },
+    { value: 'rsi-asc' as const, label: '🎯 RSI (Oversold Dip)' },
     { value: 'price-desc' as const, label: 'Price (High to Low)' },
     { value: 'price-asc' as const, label: 'Price (Low to High)' },
     { value: 'symbol-asc' as const, label: 'Alphabetical (A - Z)' }
@@ -148,6 +151,9 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
         if (selectedSector !== 'ALL' && s.category !== selectedSector) return false;
 
         // 3. Preset Filter
+        if (activePreset === 'ai-picks') return (s.aiScore ?? 0) >= 75 || ((s.rsi || 50) >= 60 && s.changePct > 1.0);
+        if (activePreset === 'gainers') return s.changePct > 0;
+        if (activePreset === 'losers') return s.changePct < 0;
         if (activePreset === 'momentum') return s.changePct >= 1.0;
         if (activePreset === 'breakout') return (s.rsi || 50) >= 65 || s.changePct >= 1.5;
         if (activePreset === 'dip') return s.changePct < 0;
@@ -156,8 +162,11 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
         return true;
       })
       .sort((a, b) => {
+        if (sortBy === 'ai-desc') return (b.aiScore ?? 50) - (a.aiScore ?? 50);
         if (sortBy === 'change-desc') return b.changePct - a.changePct;
         if (sortBy === 'change-asc') return a.changePct - b.changePct;
+        if (sortBy === 'rsi-desc') return (b.rsi ?? 50) - (a.rsi ?? 50);
+        if (sortBy === 'rsi-asc') return (a.rsi ?? 50) - (b.rsi ?? 50);
         if (sortBy === 'price-desc') return b.price - a.price;
         if (sortBy === 'price-asc') return a.price - b.price;
         if (sortBy === 'symbol-asc') return a.symbol.localeCompare(b.symbol);
@@ -170,8 +179,9 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
     const total = currentStocksList.length;
     const bullish = currentStocksList.filter(s => s.changePct > 0).length;
     const bearish = currentStocksList.filter(s => s.changePct < 0).length;
+    const aiTopCount = currentStocksList.filter(s => (s.aiScore ?? 0) >= 75 || ((s.rsi || 50) >= 60 && s.changePct > 1.0)).length;
     const topGainer = [...currentStocksList].sort((a, b) => b.changePct - a.changePct)[0];
-    return { total, bullish, bearish, topGainer };
+    return { total, bullish, bearish, aiTopCount, topGainer };
   }, [currentStocksList]);
 
   return (
@@ -227,11 +237,11 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
           </div>
           <div className="scanner-metric-pill green">
             <TrendingUp size={13} />
-            <span>{metrics.bullish} Bullish</span>
+            <span>{metrics.bullish} 24h Gainers</span>
           </div>
           <div className="scanner-metric-pill red">
             <TrendingDown size={13} />
-            <span>{metrics.bearish} Bearish</span>
+            <span>{metrics.bearish} 24h Losers</span>
           </div>
           {metrics.topGainer && (
             <div 
@@ -258,10 +268,33 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
         </button>
         <button
           type="button"
-          className={`preset-chip ${activePreset === 'momentum' ? 'active' : ''}`}
-          onClick={() => setActivePreset('momentum')}
+          className={`preset-chip ai-chip ${activePreset === 'ai-picks' ? 'active' : ''}`}
+          onClick={() => {
+            setActivePreset('ai-picks');
+            setSortBy('ai-desc');
+          }}
         >
-          <Flame size={13} /> High Momentum (&gt; +1%)
+          <Sparkles size={13} /> ✨ AI Top Picks ({metrics.aiTopCount})
+        </button>
+        <button
+          type="button"
+          className={`preset-chip green ${activePreset === 'gainers' ? 'active' : ''}`}
+          onClick={() => {
+            setActivePreset('gainers');
+            setSortBy('change-desc');
+          }}
+        >
+          <TrendingUp size={13} /> 🔥 24h Gainers ({metrics.bullish})
+        </button>
+        <button
+          type="button"
+          className={`preset-chip red ${activePreset === 'losers' ? 'active' : ''}`}
+          onClick={() => {
+            setActivePreset('losers');
+            setSortBy('change-asc');
+          }}
+        >
+          <TrendingDown size={13} /> 🔻 24h Losers ({metrics.bearish})
         </button>
         <button
           type="button"
@@ -282,9 +315,12 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
           className={`preset-chip ${activePreset === 'watchlist' ? 'active' : ''}`}
           onClick={() => setActivePreset('watchlist')}
         >
-          <Star size={13} /> Watchlist Only ({watchlist.length})
+          <Star size={13} /> Watchlist ({watchlist.length})
         </button>
       </div>
+
+      {/* 2.5 AI Scanner Intelligence Banner */}
+      
 
       {/* 3. Search & Filters Toolbar */}
       <div className="scanner-toolbar">
