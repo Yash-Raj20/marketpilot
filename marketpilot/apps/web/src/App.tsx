@@ -8,6 +8,7 @@ import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { AuthModal } from './components/AuthModal';
 import { AlertStack } from './components/AlertStack';
+import { AiCopilotDrawer } from './components/AiCopilotDrawer';
 
 import { HomePage } from './pages/HomePage';
 import { OverviewPage } from './pages/OverviewPage';
@@ -55,6 +56,7 @@ function AppLayout() {
   const [activeAlerts, setActiveAlerts] = useState<PlatformAlert[]>([]);
   const [dhanConnected, setDhanConnected] = useState(false);
   const [dhanClientId, setDhanClientId] = useState('');
+  const [aiCopilotOpen, setAiCopilotOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -431,6 +433,13 @@ function AppLayout() {
           </button>
         </div>
       )}
+
+      {/* Global Floating AI Co-Pilot Drawer */}
+      <AiCopilotDrawer
+        isOpen={aiCopilotOpen}
+        onClose={() => setAiCopilotOpen(false)}
+        onOpen={() => setAiCopilotOpen(true)}
+      />
     </div>
   );
 }
