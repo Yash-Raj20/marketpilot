@@ -1,4 +1,10 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -10,6 +16,8 @@ import marketRoutes from './routes/market.js';
 import watchlistRoutes from './routes/watchlist.js';
 import journalRoutes from './routes/journal.js';
 import adminRoutes from './routes/admin.js';
+import dhanRoutes from './routes/dhan.js';
+import telegramRoutes from './routes/telegram.js';
 import { prisma } from './db.js';
 const app = express();
 const port = Number(process.env.PORT || 4000);
@@ -51,6 +59,8 @@ app.use('/api/market', marketRoutes);
 app.use('/api/watchlist', watchlistRoutes);
 app.use('/api/journal', journalRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/dhan', dhanRoutes);
+app.use('/api/telegram', telegramRoutes);
 app.use((_req, res) => res.status(404).json({ error: 'Route not found.' }));
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof ZodError) return res.status(400).json({ error: 'Please check the submitted fields.', details: err.issues.map(i => ({ path: i.path.join('.'), message: i.message })) });

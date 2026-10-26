@@ -104,3 +104,73 @@ export interface PlatformAlert {
   createdAt: string;
   updatedAt?: string;
 }
+
+export interface DhanStatus {
+  configured: boolean;
+  connected: boolean;
+  message?: string;
+  error?: string;
+  data?: {
+    dhanClientId?: string;
+    tokenValidity?: string;
+    activeSegment?: string;
+    ddpi?: string;
+    mtf?: string;
+    dataPlan?: string;
+    dataValidity?: string;
+  };
+}
+
+export interface DhanFundLimit {
+  dhanClientId?: string;
+  availabelBalance?: number;
+  sodLimit?: number;
+  collateralAmount?: number;
+  utilizedAmount?: number;
+  withdrawableBalance?: number;
+}
+
+export interface DhanHolding {
+  tradingSymbol: string;
+  securityId: string;
+  exchange: string;
+  totalQty: number;
+  availableQty: number;
+  avgCostPrice: number;
+  lastTradedPrice?: number;
+}
+
+export interface DhanPosition {
+  tradingSymbol: string;
+  securityId: string;
+  exchangeSegment: string;
+  productType: string;
+  positionType: string;
+  buyQty: number;
+  sellQty: number;
+  netQty: number;
+  buyAvg: number;
+  sellAvg: number;
+  realizedProfit: number;
+  unrealizedProfit: number;
+}
+
+export interface TelegramStatus {
+  configured: boolean;
+  connected: boolean;
+  message?: string;
+  error?: string;
+  bot?: {
+    id: number;
+    first_name: string;
+    username: string;
+  };
+  chatId?: string;
+}
+
+export interface IntegrationsStatus {
+  useMockData: boolean;
+  dhan: DhanStatus;
+  telegram: TelegramStatus;
+}
+

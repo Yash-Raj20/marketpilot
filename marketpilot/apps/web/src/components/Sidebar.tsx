@@ -20,7 +20,8 @@ import {
   CreditCard,
   TrendingUp,
   Bell,
-  ExternalLink
+  ExternalLink,
+  Bot
 } from 'lucide-react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import type { User } from '../types';
@@ -51,6 +52,7 @@ const adminNavItems = [
   { name: 'Platform Trades', path: '/admin/trades', icon: TrendingUp },
   { name: 'System Alerts & Broadcast', path: '/admin/alerts', icon: Bell },
   { name: 'Audit & Security Logs', path: '/admin/audit', icon: ShieldCheck },
+  { name: 'Telegram & DhanHQ', path: '/admin/integrations', icon: Bot },
   { name: 'Admin Profile', path: '/admin/profile', icon: UserCheck }
 ];
 

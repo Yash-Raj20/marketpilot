@@ -53,10 +53,22 @@ function AppLayout() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [journal, setJournal] = useState<JournalEntry[]>([]);
   const [activeAlerts, setActiveAlerts] = useState<PlatformAlert[]>([]);
+  const [dhanConnected, setDhanConnected] = useState(false);
+  const [dhanClientId, setDhanClientId] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
+    // 0. Check live DhanHQ broker status
+    api<{ configured: boolean; connected: boolean; data?: { dhanClientId?: string } }>('/dhan/status')
+      .then(res => {
+        if (res.connected) {
+          setDhanConnected(true);
+          if (res.data?.dhanClientId) setDhanClientId(res.data.dhanClientId);
+        }
+      })
+      .catch(() => {});
+
     // 1. Fetch market stocks from API
     api<{ results: Stock[] }>('/market/stocks')
       .then(d => setStocks(d.results))
@@ -231,6 +243,8 @@ function AppLayout() {
           onShowToast={setToast}
           onLogout={handleLogout}
           activeAlerts={activeAlerts}
+          dhanConnected={dhanConnected}
+          dhanClientId={dhanClientId}
         />
 
         <div className="content-wrap">
@@ -258,14 +272,38 @@ function AppLayout() {
                 </div>
               </div>
 
-              <div className="demo-alert">
-                <div className="alert-symbol">i</div>
-                <div>
-                  <strong>Preview environment</strong>
-                  <span> All stock prices and charts are simulated sample data, not live exchange quotes.</span>
+              <div 
+                className="demo-alert"
+                style={dhanConnected ? { 
+                  background: 'rgba(13, 31, 30, 0.75)', 
+                  borderColor: 'rgba(69, 214, 162, 0.35)' 
+                } : undefined}
+              >
+                <div 
+                  className="alert-symbol"
+                  style={dhanConnected ? { background: '#45d6a2', color: '#091312', fontWeight: 800 } : undefined}
+                >
+                  {dhanConnected ? '✓' : 'i'}
                 </div>
-                <button onClick={() => setToast('Connect a licensed market data provider before production launch.')}>
-                  Learn more <ArrowUpRight size={13} />
+                <div>
+                  <strong style={dhanConnected ? { color: '#45d6a2' } : undefined}>
+                    {dhanConnected 
+                      ? (user ? `Live DhanHQ Feed (Client ID: ${dhanClientId})` : 'Live Exchange Market Feed Active') 
+                      : 'Preview environment'}
+                  </strong>
+                  <span>
+                    {dhanConnected 
+                      ? (user 
+                          ? ' Direct broker connection active. Real-time balance and broker portfolio synced in read-only mode.'
+                          : ' Real-time market prices synced directly from exchange via DhanHQ.')
+                      : ' All stock prices and charts are simulated sample data, not live exchange quotes.'}
+                  </span>
+                </div>
+                <button 
+                  onClick={() => setToast(dhanConnected ? `Connected to DhanHQ API v2 (Client: ${dhanClientId}). Safe read-only mode.` : 'Connect a licensed market data provider before production launch.')}
+                  style={dhanConnected ? { color: '#45d6a2', borderColor: 'rgba(69, 214, 162, 0.3)' } : undefined}
+                >
+                  {dhanConnected ? 'Broker Info' : 'Learn more'} <ArrowUpRight size={13} />
                 </button>
               </div>
             </>

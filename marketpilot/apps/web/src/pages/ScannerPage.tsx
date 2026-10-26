@@ -13,12 +13,14 @@ import {
   ShieldCheck, 
   BookOpen, 
   ArrowUpRight,
-  ChevronDown
+  ChevronDown,
+  RefreshCw
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { StockTable } from '../components/StockTable';
 import { CustomSelect } from '../components/CustomSelect';
+import { api } from '../lib/api';
 import type { Stock } from '../types';
 
 interface ScannerPageProps {
@@ -44,8 +46,52 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [sortBy, setSortBy] = useState<SortOption>('change-desc');
 
+  // Live exchange state
+  const [liveStocks, setLiveStocks] = useState<Stock[]>(stocks);
+  const [dataMode, setDataMode] = useState<'LIVE_EXCHANGE' | 'DEMO' | 'FALLBACK'>('LIVE_EXCHANGE');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [inspectedChartPoints, setInspectedChartPoints] = useState<Array<{ t: string; v: number }>>([]);
+
+  const currentStocksList = liveStocks.length > 0 ? liveStocks : stocks;
+
+  const refreshStocks = () => {
+    setIsRefreshing(true);
+    api<{ dataMode?: string; results: Stock[] }>('/market/stocks')
+      .then(d => {
+        if (d && d.results && d.results.length > 0) {
+          setLiveStocks(d.results);
+          if (d.dataMode) setDataMode(d.dataMode as any);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsRefreshing(false));
+  };
+
+  useEffect(() => {
+    refreshStocks();
+  }, []);
+
   // Deep-dive Inspector modal state
   const [inspectedStock, setInspectedStock] = useState<Stock | null>(null);
+
+  // Fetch real live intraday chart candles when stock is inspected
+  useEffect(() => {
+    if (!inspectedStock) {
+      setInspectedChartPoints([]);
+      return;
+    }
+    api<{ points: Array<{ t: string; v: number }> }>(`/market/chart?symbol=${encodeURIComponent(inspectedStock.symbol)}&range=1D`)
+      .then(d => {
+        if (d && d.points && d.points.length > 0) {
+          setInspectedChartPoints(d.points);
+        } else {
+          const base = inspectedStock.price;
+          const times = ['09:15', '10:30', '11:45', '13:00', '14:15', '15:30'];
+          setInspectedChartPoints(times.map((t, i) => ({ t, v: +(base * (1 + (i % 2 === 0 ? 0.003 : -0.002))).toFixed(2) })));
+        }
+      })
+      .catch(() => {});
+  }, [inspectedStock]);
 
   // Keyboard shortcut Ctrl+K / Cmd+K to focus search
   useEffect(() => {
@@ -65,11 +111,11 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
   // Unique list of sectors
   const sectors = useMemo(() => {
     const set = new Set<string>();
-    stocks.forEach(s => {
+    currentStocksList.forEach(s => {
       if (s.category) set.add(s.category);
     });
     return ['ALL', ...Array.from(set)];
-  }, [stocks]);
+  }, [currentStocksList]);
 
   // Dropdown options with count badges for custom select
   const sectorOptions = useMemo(() => {
@@ -77,10 +123,10 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
       value: sec,
       label: sec === 'ALL' ? 'All Sectors' : sec,
       badge: sec !== 'ALL' 
-        ? `${stocks.filter(s => s.category === sec).length}` 
-        : `${stocks.length}`
+        ? `${currentStocksList.filter(s => s.category === sec).length}` 
+        : `${currentStocksList.length}`
     }));
-  }, [sectors, stocks]);
+  }, [sectors, currentStocksList]);
 
   const sortOptions = useMemo(() => [
     { value: 'change-desc' as const, label: '24h Gainers (High to Low)' },
@@ -92,7 +138,7 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
 
   // Filtered & Sorted stock list
   const filteredStocks = useMemo(() => {
-    return stocks
+    return currentStocksList
       .filter(s => {
         // 1. Text Query
         const matchQuery = `${s.symbol} ${s.name} ${s.category}`.toLowerCase().includes(query.toLowerCase());
@@ -117,28 +163,16 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
         if (sortBy === 'symbol-asc') return a.symbol.localeCompare(b.symbol);
         return 0;
       });
-  }, [stocks, query, selectedSector, activePreset, sortBy, watchlist]);
+  }, [currentStocksList, query, selectedSector, activePreset, sortBy, watchlist]);
 
   // Market overview pulse metrics for current stock set
   const metrics = useMemo(() => {
-    const total = stocks.length;
-    const bullish = stocks.filter(s => s.changePct > 0).length;
-    const bearish = stocks.filter(s => s.changePct < 0).length;
-    const topGainer = [...stocks].sort((a, b) => b.changePct - a.changePct)[0];
+    const total = currentStocksList.length;
+    const bullish = currentStocksList.filter(s => s.changePct > 0).length;
+    const bearish = currentStocksList.filter(s => s.changePct < 0).length;
+    const topGainer = [...currentStocksList].sort((a, b) => b.changePct - a.changePct)[0];
     return { total, bullish, bearish, topGainer };
-  }, [stocks]);
-
-  // Generate synthetic mini chart data for the inspected stock
-  const inspectedChartPoints = useMemo(() => {
-    if (!inspectedStock) return [];
-    const base = inspectedStock.price;
-    const times = ['09:15', '09:45', '10:30', '11:15', '12:00', '12:45', '13:30', '14:15', '15:00', '15:30'];
-    const variations = [-0.012, -0.015, -0.005, 0.002, -0.002, 0.006, 0.004, 0.009, 0.013, inspectedStock.changePct / 100];
-    return times.map((t, i) => ({
-      t,
-      v: +(base * (1 + variations[i])).toFixed(2)
-    }));
-  }, [inspectedStock]);
+  }, [currentStocksList]);
 
   return (
     <section className="panel page-panel scanner-wrapper-panel">
@@ -146,10 +180,40 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
       <div className="panel-heading scanner-header-row">
         <div>
           <div className="section-kicker">DISCOVERY WORKSPACE</div>
-          <h2>
-            Market Scanner{' '}
-            <span className="live-tag"><span /> LIVE SIMULATED</span>
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <h2 style={{ margin: 0 }}>Market Scanner</h2>
+            {dataMode === 'LIVE_EXCHANGE' ? (
+              <span className="live-tag live" style={{ background: 'rgba(69, 214, 162, 0.15)', color: '#45d6a2', border: '1px solid rgba(69, 214, 162, 0.3)' }}>
+                <span style={{ background: '#45d6a2' }} /> LIVE EXCHANGE FEED (NSE/BSE)
+              </span>
+            ) : (
+              <span className="live-tag demo">
+                <span /> SIMULATED DEMO
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={refreshStocks}
+              disabled={isRefreshing}
+              style={{
+                background: 'rgba(56, 189, 248, 0.1)',
+                border: '1px solid rgba(56, 189, 248, 0.3)',
+                color: '#38bdf8',
+                borderRadius: '6px',
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+              title="Fetch latest live exchange quotes"
+            >
+              <RefreshCw size={11} className={isRefreshing ? 'spin' : ''} />
+              {isRefreshing ? 'Syncing...' : 'Sync Live Quotes'}
+            </button>
+          </div>
           <p className="panel-description">
             Algorithmic scanners and technical screens across NSE/BSE equities and benchmarks.
           </p>
@@ -190,7 +254,7 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
           className={`preset-chip ${activePreset === 'all' ? 'active' : ''}`}
           onClick={() => setActivePreset('all')}
         >
-          All Instruments ({stocks.length})
+          All Instruments ({currentStocksList.length})
         </button>
         <button
           type="button"

@@ -33,7 +33,13 @@ import {
   Database,
   Server,
   Terminal,
-  Shield
+  Shield,
+  Bot,
+  Send,
+  Radio,
+  ToggleLeft,
+  ToggleRight,
+  Flame
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, setToken } from '../lib/api';
@@ -45,7 +51,9 @@ import type {
   AdminUserListItem,
   AdminAuditLog,
   PlatformAlert,
-  JournalEntry
+  JournalEntry,
+  IntegrationsStatus,
+  DhanFundLimit
 } from '../types';
 
 interface AdminPageProps {
@@ -54,7 +62,7 @@ interface AdminPageProps {
   onShowToast: (msg: string) => void;
 }
 
-type TabType = 'overview' | 'users' | 'subscriptions' | 'trades' | 'alerts' | 'audit' | 'profile';
+type TabType = 'overview' | 'users' | 'subscriptions' | 'trades' | 'alerts' | 'audit' | 'integrations' | 'profile';
 
 // Select dropdown option sets
 const roleFilterOptions: Option[] = [
@@ -118,14 +126,14 @@ export function AdminPage({ currentUser, onUserUpdate, onShowToast }: AdminPageP
   // Admin console states
   const { tab } = useParams<{ tab?: string }>();
   const [activeTab, setActiveTab] = useState<TabType>(() => {
-    if (tab && ['overview', 'users', 'subscriptions', 'trades', 'alerts', 'audit', 'profile'].includes(tab)) {
+    if (tab && ['overview', 'users', 'subscriptions', 'trades', 'alerts', 'audit', 'integrations', 'profile'].includes(tab)) {
       return tab as TabType;
     }
     return 'overview';
   });
 
   useEffect(() => {
-    if (tab && ['overview', 'users', 'subscriptions', 'trades', 'alerts', 'audit', 'profile'].includes(tab)) {
+    if (tab && ['overview', 'users', 'subscriptions', 'trades', 'alerts', 'audit', 'integrations', 'profile'].includes(tab)) {
       setActiveTab(tab as TabType);
     }
   }, [tab]);
@@ -134,6 +142,18 @@ export function AdminPage({ currentUser, onUserUpdate, onShowToast }: AdminPageP
     setActiveTab(newTab);
     navigate(`/admin/${newTab}`);
   };
+
+  // Third-party Integrations (Telegram & DhanHQ) states
+  const [integrationsData, setIntegrationsData] = useState<IntegrationsStatus | null>(null);
+  const [integrationsLoading, setIntegrationsLoading] = useState(false);
+  const [customChatId, setCustomChatId] = useState('');
+  const [testAlertSending, setTestAlertSending] = useState(false);
+  const [telegramBroadcastTitle, setTelegramBroadcastTitle] = useState('');
+  const [telegramBroadcastMsg, setTelegramBroadcastMsg] = useState('');
+  const [telegramBroadcastSending, setTelegramBroadcastSending] = useState(false);
+  const [mockToggling, setMockToggling] = useState(false);
+  const [probeFunds, setProbeFunds] = useState<DhanFundLimit | null>(null);
+  const [probingFunds, setProbingFunds] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -268,6 +288,110 @@ export function AdminPage({ currentUser, onUserUpdate, onShowToast }: AdminPageP
     }
   };
 
+  const fetchIntegrationsStatus = async () => {
+    if (!isAdmin) return;
+    try {
+      setIntegrationsLoading(true);
+      const data = await api<IntegrationsStatus>('/admin/integrations/status');
+      setIntegrationsData(data);
+      if (data.telegram?.chatId && !customChatId) {
+        setCustomChatId(data.telegram.chatId);
+      }
+    } catch (err) {
+      console.error('Failed to load integrations status:', err);
+    } finally {
+      setIntegrationsLoading(false);
+    }
+  };
+
+  const handleToggleMockMode = async () => {
+    try {
+      setMockToggling(true);
+      const res = await api<{ useMockData: boolean; message: string }>('/admin/integrations/toggle-mock', {
+        method: 'POST'
+      });
+      if (integrationsData) {
+        setIntegrationsData({ ...integrationsData, useMockData: res.useMockData });
+      }
+      onShowToast(res.message);
+    } catch (err) {
+      onShowToast(err instanceof Error ? err.message : 'Failed to toggle data mode');
+    } finally {
+      setMockToggling(false);
+    }
+  };
+
+  const handleSendTelegramTest = async () => {
+    let target = customChatId.trim();
+    if (!target) {
+      onShowToast('Please provide a Telegram Chat ID or Channel ID (e.g. -1003910842941)');
+      return;
+    }
+    if (/^100\d{7,}$/.test(target)) {
+      target = `-${target}`;
+      setCustomChatId(target);
+    }
+
+    try {
+      setTestAlertSending(true);
+      const res = await api<{ success: boolean; message: string }>('/admin/integrations/telegram-test', {
+        method: 'POST',
+        body: JSON.stringify({ chatId: target })
+      });
+      onShowToast(res.message);
+    } catch (err) {
+      onShowToast(err instanceof Error ? err.message : 'Telegram test dispatch failed');
+    } finally {
+      setTestAlertSending(false);
+    }
+  };
+
+  const handleSendTelegramBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!telegramBroadcastTitle.trim() || !telegramBroadcastMsg.trim()) {
+      onShowToast('Please enter both title and message for broadcast.');
+      return;
+    }
+
+    let target = customChatId.trim();
+    if (/^100\d{7,}$/.test(target)) {
+      target = `-${target}`;
+      setCustomChatId(target);
+    }
+
+    try {
+      setTelegramBroadcastSending(true);
+      const res = await api<{ success: boolean; message: string }>('/admin/integrations/telegram-broadcast', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: telegramBroadcastTitle.trim(),
+          message: telegramBroadcastMsg.trim(),
+          chatId: target || undefined
+        })
+      });
+      onShowToast(res.message);
+      setTelegramBroadcastTitle('');
+      setTelegramBroadcastMsg('');
+    } catch (err) {
+      onShowToast(err instanceof Error ? err.message : 'Failed to send broadcast');
+    } finally {
+      setTelegramBroadcastSending(false);
+    }
+  };
+
+  const handleProbeFunds = async () => {
+    try {
+      setProbingFunds(true);
+      const res = await api<DhanFundLimit>('/dhan/funds?refresh=true');
+      setProbeFunds(res);
+      onShowToast('Live DhanHQ funds probe successful!');
+    } catch (err) {
+      onShowToast(err instanceof Error ? err.message : 'Failed to probe Dhan funds');
+    } finally {
+      setProbingFunds(false);
+    }
+  };
+
   useEffect(() => {
     if (isAdmin) {
       fetchDashboardData();
@@ -275,8 +399,15 @@ export function AdminPage({ currentUser, onUserUpdate, onShowToast }: AdminPageP
       fetchTrades();
       fetchAlerts();
       fetchAuditLogs();
+      fetchIntegrationsStatus();
     }
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin && activeTab === 'integrations') {
+      fetchIntegrationsStatus();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (isAdmin && activeTab === 'users') {
@@ -1715,6 +1846,275 @@ export function AdminPage({ currentUser, onUserUpdate, onShowToast }: AdminPageP
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ----------------- TAB: TELEGRAM & DHANHQ INTEGRATIONS ----------------- */}
+        {activeTab === 'integrations' && (
+          <div className="admin-tab-content">
+            <div className="content-header-row">
+              <div>
+                <h2>Third-Party Integrations & Live Data Control</h2>
+                <p>Live management of DhanHQ v2 Broker API, Telegram Bot Dispatch Engine, and Data-Feed Mode.</p>
+              </div>
+              <button 
+                className="admin-secondary-btn" 
+                onClick={fetchIntegrationsStatus} 
+                disabled={integrationsLoading}
+              >
+                <RefreshCw size={15} className={integrationsLoading ? 'spin' : ''} /> Refresh Status
+              </button>
+            </div>
+
+            {/* DATA SOURCE TOGGLE BANNER */}
+            <div className={`integrations-mode-banner ${integrationsData?.useMockData ? 'mock-mode' : 'live-mode'}`}>
+              <div className="mode-banner-info">
+                <div className={`mode-banner-icon ${integrationsData?.useMockData ? 'mock-icon' : 'live-icon'}`}>
+                  {integrationsData?.useMockData ? <Flame size={24} /> : <Radio size={24} />}
+                </div>
+                <div>
+                  <div className="mode-banner-title">
+                    {integrationsData?.useMockData ? (
+                      <>
+                        <span className="status-dot" style={{ background: '#fbbf24' }} />
+                        MOCK / SIMULATED DATA MODE ACTIVE
+                      </>
+                    ) : (
+                      <>
+                        <span className="status-dot pulse" style={{ background: '#45d6a2' }} />
+                        LIVE DHANHQ BROKER DATA ACTIVE
+                      </>
+                    )}
+                  </div>
+                  <p className="mode-banner-desc">
+                    {integrationsData?.useMockData 
+                      ? 'The platform is running on synthetic Indian market simulation data. DhanHQ API is in standby.'
+                      : 'Real-time quotes, holdings, positions, and funds are actively fetched from DhanHQ v2 API.'}
+                  </p>
+                </div>
+              </div>
+
+              <button 
+                className={`mode-toggle-btn ${integrationsData?.useMockData ? 'to-live' : 'to-mock'}`}
+                onClick={handleToggleMockMode}
+                disabled={mockToggling}
+              >
+                {mockToggling ? (
+                  <RefreshCw size={15} className="spin" />
+                ) : integrationsData?.useMockData ? (
+                  <>
+                    <ToggleRight size={18} /> Switch to Live DhanHQ Data
+                  </>
+                ) : (
+                  <>
+                    <ToggleLeft size={18} /> Switch to Demo Mock Data
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* INTEGRATIONS GRID */}
+            <div className="integrations-grid">
+              
+              {/* CARD 1: TELEGRAM BOT DISPATCH ENGINE */}
+              <div className="integration-card">
+                <div className="integration-header">
+                  <div className="integration-title-box">
+                    <div className="integration-logo-icon telegram-logo">
+                      <Send size={20} />
+                    </div>
+                    <div>
+                      <h3>Telegram Bot Engine</h3>
+                      <span>Instant Trade Alerts & Broadcasts</span>
+                    </div>
+                  </div>
+                  <div className={`status-pill ${integrationsData?.telegram?.connected ? 'online' : 'offline'}`}>
+                    <span className={`status-dot ${integrationsData?.telegram?.connected ? 'pulse' : ''}`} />
+                    {integrationsData?.telegram?.connected ? 'Connected' : 'Disconnected'}
+                  </div>
+                </div>
+
+                <div className="integration-meta-list">
+                  <div className="meta-item">
+                    <span className="meta-label">Bot Username</span>
+                    <span className="meta-val">
+                      {integrationsData?.telegram?.bot?.username ? (
+                        <a 
+                          href={`https://t.me/${integrationsData.telegram.bot.username}`} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          style={{ color: '#38bdf8', textDecoration: 'none' }}
+                        >
+                          @{integrationsData.telegram.bot.username} <ExternalLink size={11} style={{ display: 'inline' }} />
+                        </a>
+                      ) : 'Not configured'}
+                    </span>
+                  </div>
+                  <div className="meta-item">
+                    <span className="meta-label">Bot Name</span>
+                    <span className="meta-val">{integrationsData?.telegram?.bot?.first_name || 'N/A'}</span>
+                  </div>
+                  <div className="meta-item">
+                    <span className="meta-label">Bot ID</span>
+                    <span className="meta-val"><code>{integrationsData?.telegram?.bot?.id || 'N/A'}</code></span>
+                  </div>
+                  <div className="meta-item">
+                    <span className="meta-label">Webhook Mode</span>
+                    <span className="meta-val">Long Polling / Direct Dispatch</span>
+                  </div>
+                </div>
+
+                <div className="integration-form-block">
+                  <label>
+                    <Send size={13} /> Telegram Chat ID / Channel Recipient
+                  </label>
+                  <input 
+                    type="text" 
+                    className="integration-input" 
+                    value={customChatId} 
+                    onChange={e => setCustomChatId(e.target.value)} 
+                    placeholder="e.g. -1003910842941 (Channel) or personal user ID"
+                  />
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>
+                    Tip: Channel IDs start with <code>-100</code> (e.g. <code>-1003910842941</code> for <strong>Screeners</strong>). Personal User ID can be checked via <code>@userinfobot</code>.
+                  </div>
+                  <div className="integration-actions-row">
+                    <button 
+                      type="button" 
+                      className="action-btn secondary"
+                      onClick={handleSendTelegramTest}
+                      disabled={testAlertSending}
+                    >
+                      {testAlertSending ? <RefreshCw size={13} className="spin" /> : <Send size={13} />}
+                      Dispatch Test Alert
+                    </button>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSendTelegramBroadcast} className="integration-form-block" style={{ borderTop: '1px solid #162234', paddingTop: '16px' }}>
+                  <label>
+                    <Bell size={13} /> Channel Broadcast Desk
+                  </label>
+                  <input 
+                    type="text" 
+                    className="integration-input" 
+                    value={telegramBroadcastTitle} 
+                    onChange={e => setTelegramBroadcastTitle(e.target.value)} 
+                    placeholder="Broadcast Subject (e.g. Morning Nifty Pulse)"
+                    required
+                  />
+                  <textarea 
+                    className="integration-textarea" 
+                    rows={3}
+                    value={telegramBroadcastMsg} 
+                    onChange={e => setTelegramBroadcastMsg(e.target.value)} 
+                    placeholder="Type announcement message to broadcast to your Telegram audience..."
+                    required
+                  />
+                  <button 
+                    type="submit" 
+                    className="action-btn primary"
+                    disabled={telegramBroadcastSending}
+                  >
+                    {telegramBroadcastSending ? <RefreshCw size={13} className="spin" /> : <Send size={13} />}
+                    Publish Broadcast to Telegram
+                  </button>
+                </form>
+              </div>
+
+              {/* CARD 2: DHANHQ BROKER V2 ENGINE */}
+              <div className="integration-card">
+                <div className="integration-header">
+                  <div className="integration-title-box">
+                    <div className="integration-logo-icon dhan-logo">
+                      <Radio size={20} />
+                    </div>
+                    <div>
+                      <h3>DhanHQ API v2 Integration</h3>
+                      <span>Portfolio, Holdings & Live Feeds</span>
+                    </div>
+                  </div>
+                  <div className={`status-pill ${integrationsData?.dhan?.connected ? 'online' : 'offline'}`}>
+                    <span className={`status-dot ${integrationsData?.dhan?.connected ? 'pulse' : ''}`} />
+                    {integrationsData?.dhan?.connected ? 'Active v2' : 'Standby'}
+                  </div>
+                </div>
+
+                <div className="integration-meta-list">
+                  <div className="meta-item">
+                    <span className="meta-label">Dhan Client ID</span>
+                    <span className="meta-val"><code>{integrationsData?.dhan?.data?.dhanClientId || '1111932175'}</code></span>
+                  </div>
+                  <div className="meta-item">
+                    <span className="meta-label">Token Validity</span>
+                    <span className="meta-val" style={{ color: '#45d6a2' }}>
+                      {integrationsData?.dhan?.data?.tokenValidity || 'Active'}
+                    </span>
+                  </div>
+                  <div className="meta-item">
+                    <span className="meta-label">Active Segments</span>
+                    <span className="meta-val">{integrationsData?.dhan?.data?.activeSegment || 'Equity, Derivatives, Currency, Commodity'}</span>
+                  </div>
+                  <div className="meta-item">
+                    <span className="meta-label">Security Boundary</span>
+                    <span className="meta-val" style={{ color: '#38bdf8' }}>Strict Read-Only Mode</span>
+                  </div>
+                </div>
+
+                <div className="integration-form-block">
+                  <label>
+                    <ShieldCheck size={13} /> Live Account Diagnostic Probes
+                  </label>
+                  <p style={{ fontSize: '12px', color: '#8c9bb2', margin: 0 }}>
+                    Execute instant read-only health checks against DhanHQ v2 endpoints to inspect funds and holdings.
+                  </p>
+                  
+                  <div className="integration-actions-row">
+                    <button 
+                      type="button" 
+                      className="action-btn secondary"
+                      onClick={handleProbeFunds}
+                      disabled={probingFunds}
+                    >
+                      {probingFunds ? <RefreshCw size={13} className="spin" /> : <DollarSign size={13} />}
+                      Probe Live Available Funds
+                    </button>
+                  </div>
+
+                  {probeFunds && (
+                    <div className="probe-results-box">
+                      <div style={{ fontWeight: 600, color: '#f8fafc', marginBottom: '6px' }}>
+                        DhanHQ Account Funds Summary:
+                      </div>
+                      <div className="probe-grid">
+                        <div className="probe-stat">
+                          <span>Available Cash</span>
+                          <strong>₹{(probeFunds.availabelBalance ?? 0).toLocaleString('en-IN')}</strong>
+                        </div>
+                        <div className="probe-stat">
+                          <span>Withdrawable</span>
+                          <strong>₹{(probeFunds.withdrawableBalance ?? 0).toLocaleString('en-IN')}</strong>
+                        </div>
+                        <div className="probe-stat">
+                          <span>Utilized Margin</span>
+                          <strong style={{ color: '#94a3b8' }}>₹{(probeFunds.utilizedAmount ?? 0).toLocaleString('en-IN')}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 'auto', background: 'rgba(56, 189, 248, 0.05)', border: '1px solid rgba(56, 189, 248, 0.15)', borderRadius: '10px', padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#38bdf8', fontWeight: 600, fontSize: '13px', marginBottom: '4px' }}>
+                    <CheckCircle2 size={15} /> Zero-Execution Risk Protected
+                  </div>
+                  <p style={{ fontSize: '11px', color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
+                    Order placement, modification, and funds withdrawal methods are completely omitted from the API client. Your real trading capital remains 100% secure.
+                  </p>
+                </div>
+              </div>
+
             </div>
           </div>
         )}

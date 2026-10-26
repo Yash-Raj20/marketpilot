@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { createToken, requireAuth, COOKIE_NAME, COOKIE_OPTIONS } from '../middleware/auth.js';
 import type { AuthRequest } from '../types.js';
+import { sendWelcomeEmail, sendPasswordChangedEmail, sendEmail } from '../services/email.js';
 
 const router = Router();
 
@@ -67,6 +68,11 @@ router.post('/register', async (req, res, next) => {
 
     const token = createToken(user);
     res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);
+
+    // Send welcome email via Nodemailer asynchronously
+    sendWelcomeEmail({ name: user.name, email: user.email }).catch((err) => {
+      console.error('[EmailService] Failed to send welcome email:', err);
+    });
 
     res.status(201).json({
       token,
@@ -157,6 +163,11 @@ router.post('/reset-password', async (req, res, next) => {
     const token = createToken(updated);
     res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);
 
+    // Send password updated security alert via Nodemailer asynchronously
+    sendPasswordChangedEmail({ name: updated.name, email: updated.email }).catch((err) => {
+      console.error('[EmailService] Failed to send password reset alert email:', err);
+    });
+
     res.json({
       token,
       user: updated,
@@ -235,6 +246,11 @@ router.put('/change-password', requireAuth, async (req: AuthRequest, res, next) 
       data: { userId: req.user!.id, action: 'PASSWORD_CHANGED' }
     });
 
+    // Send security alert via Nodemailer asynchronously
+    sendPasswordChangedEmail({ name: user.name, email: user.email }).catch((err) => {
+      console.error('[EmailService] Failed to send password changed alert email:', err);
+    });
+
     res.json({ message: 'Password changed successfully.' });
   } catch (e) {
     next(e);
@@ -266,6 +282,34 @@ router.put('/subscription', requireAuth, async (req: AuthRequest, res, next) => 
     res.json({
       user,
       message: `Successfully updated to the ${plan} plan!`
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// 9. TEST EMAIL DISPATCH (NODEMAILER VERIFICATION)
+router.post('/send-test-email', async (req, res, next) => {
+  try {
+    const { email } = z.object({
+      email: z.string().trim().email('Invalid email address')
+    }).parse(req.body);
+
+    const result = await sendEmail({
+      to: email,
+      subject: 'MarketPilot AI — Nodemailer Integration Test',
+      html: `
+        <h2>Nodemailer Integration Test Successful ✅</h2>
+        <p>This is a test email sent from the MarketPilot AI backend using <strong>Nodemailer</strong>.</p>
+        <p>Sent at: <strong>${new Date().toLocaleString()}</strong></p>
+        <p>Ready for development and staging, with seamless swappability for production.</p>
+      `
+    });
+
+    res.json({
+      success: true,
+      message: `Test email dispatched to ${email}`,
+      previewUrl: result.previewUrl || null
     });
   } catch (e) {
     next(e);

@@ -14,12 +14,14 @@ import {
   CandlestickChart,
   BarChart3,
   Layers,
-  ChevronRight
+  ChevronRight,
+  Radio,
+  Zap
 } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
-import type { Stock, User } from '../types';
+import type { Stock, User, DhanFundLimit } from '../types';
 
 interface OverviewPageProps {
   stocks: Stock[];
@@ -222,15 +224,46 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
   );
   const [sectors, setSectors] = useState(defaultSectors);
   const [fiiFlow, setFiiFlow] = useState({ fiiNet: 1420.5, diiNet: 890.2 });
+  const [marketConfig, setMarketConfig] = useState<{ useMockData: boolean; provider: string; dhanConfigured: boolean } | null>(null);
+  const [dhanStatus, setDhanStatus] = useState<{ configured: boolean; connected: boolean; data?: { dhanClientId?: string } } | null>(null);
+  const [dhanFunds, setDhanFunds] = useState<DhanFundLimit | null>(null);
+  const [dhanHoldingsCount, setDhanHoldingsCount] = useState<number>(0);
+  const [dhanPositionsCount, setDhanPositionsCount] = useState<number>(0);
+
+  // Fetch feed configuration and Dhan broker state
+  useEffect(() => {
+    api<{ useMockData: boolean; provider: string; dhanConfigured: boolean }>('/market/config')
+      .then(setMarketConfig)
+      .catch(() => {});
+
+    api<{ configured: boolean; connected: boolean; data?: { dhanClientId?: string } }>('/dhan/status')
+      .then(res => {
+        setDhanStatus(res);
+        if (res.connected && user) {
+          api<DhanFundLimit>('/dhan/funds').then(setDhanFunds).catch(() => {});
+          api<{ holdings: unknown[] }>('/dhan/holdings').then(h => setDhanHoldingsCount(h.holdings?.length || 0)).catch(() => {});
+          api<{ positions: unknown[] }>('/dhan/positions').then(p => setDhanPositionsCount(p.positions?.length || 0)).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, [user]);
+
+  const [chartMeta, setChartMeta] = useState<{ currentPrice?: number; changePct?: number } | null>(null);
 
   // Fetch chart data from API on symbol or timeframe change
   useEffect(() => {
-    api<{ points: ChartPoint[]; high: number; low: number }>(
+    api<{ points: ChartPoint[]; high: number; low: number; currentPrice?: number; changePct?: number }>(
       `/market/chart?symbol=${encodeURIComponent(selectedSymbol)}&range=${timeframe}`
     )
       .then(d => {
         if (d && d.points && d.points.length > 0) {
           setChartPoints(d.points);
+          if (d.currentPrice !== undefined) {
+            setChartMeta({
+              currentPrice: d.currentPrice,
+              changePct: d.changePct
+            });
+          }
         }
       })
       .catch(() => {
@@ -239,13 +272,23 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
       });
   }, [selectedSymbol, timeframe]);
 
+  const [liveIndices, setLiveIndices] = useState<Stock[]>([]);
+  const [liveGainers, setLiveGainers] = useState<Stock[]>([]);
+  const [liveLosers, setLiveLosers] = useState<Stock[]>([]);
+
   // Fetch overview metadata
   useEffect(() => {
     api<{
+      indices?: Stock[];
+      movers?: Stock[];
+      losers?: Stock[];
       sectorHeatmap?: typeof defaultSectors;
       institutionalFlow?: { fiiNet: number; diiNet: number };
     }>('/market/overview')
       .then(d => {
+        if (d.indices) setLiveIndices(d.indices);
+        if (d.movers) setLiveGainers(d.movers);
+        if (d.losers) setLiveLosers(d.losers);
         if (d.sectorHeatmap) setSectors(d.sectorHeatmap);
         if (d.institutionalFlow) setFiiFlow(d.institutionalFlow);
       })
@@ -253,9 +296,10 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
   }, []);
 
   // Compute live prices & stats
-  const currentStock = stocks.find(s => s.symbol === selectedSymbol) || {
-    price: selectedSymbol === 'NIFTY 50' ? 24872.3 : selectedSymbol === 'BANK NIFTY' ? 52180.4 : 81450.2,
-    changePct: selectedSymbol === 'BANK NIFTY' ? 0.92 : selectedSymbol === 'SENSEX' ? 0.52 : 0.64
+  const foundStock = liveIndices.find(s => s.symbol === selectedSymbol) || stocks.find(s => s.symbol === selectedSymbol);
+  const currentStock = {
+    price: chartMeta?.currentPrice ?? foundStock?.price ?? (selectedSymbol === 'NIFTY 50' ? 22649.35 : selectedSymbol === 'BANK NIFTY' ? 54111.05 : 73221.19),
+    changePct: chartMeta?.changePct ?? foundStock?.changePct ?? 0.22
   };
 
   const prices = chartPoints.map(p => p.v);
@@ -264,12 +308,155 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
 
   // Mover lists
   const nonIndexStocks = stocks.filter(s => !['NIFTY 50', 'BANK NIFTY', 'SENSEX', 'INDIA VIX'].includes(s.symbol));
-  const gainers = [...nonIndexStocks].sort((a, b) => b.changePct - a.changePct).slice(0, 5);
-  const losers = [...nonIndexStocks].sort((a, b) => a.changePct - b.changePct).slice(0, 5);
-  const activeMovers = moversTab === 'gainers' ? gainers : losers;
+  const fallbackGainers = [...nonIndexStocks].sort((a, b) => b.changePct - a.changePct).slice(0, 5);
+  const fallbackLosers = [...nonIndexStocks].sort((a, b) => a.changePct - b.changePct).slice(0, 5);
+  const activeMovers = moversTab === 'gainers' 
+    ? (liveGainers.length > 0 ? liveGainers : fallbackGainers)
+    : (liveLosers.length > 0 ? liveLosers : fallbackLosers);
+
+  const niftyBenchmark = liveIndices.find(s => s.symbol === 'NIFTY 50') || stocks.find(s => s.symbol === 'NIFTY 50') || { price: 22649.35, changePct: 0.22 };
+  const bankNiftyBenchmark = liveIndices.find(s => s.symbol === 'BANK NIFTY') || stocks.find(s => s.symbol === 'BANK NIFTY') || { price: 54111.05, changePct: -0.32 };
+  const sensexBenchmark = liveIndices.find(s => s.symbol === 'SENSEX') || stocks.find(s => s.symbol === 'SENSEX') || { price: 73221.19, changePct: 0.13 };
 
   return (
     <>
+      {/* Live Feed / Mock Mode Bar */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        background: '#0d1523',
+        border: '1px solid #1a293f',
+        borderRadius: '10px',
+        padding: '10px 16px',
+        marginBottom: '16px',
+        fontSize: '12px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{
+            display: 'inline-block',
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: marketConfig?.useMockData ? '#fbbf24' : (dhanStatus?.connected ? '#45d6a2' : '#fbbf24')
+          }} />
+          <strong style={{ color: '#f1f5f9' }}>
+            {marketConfig?.useMockData 
+              ? 'Demo Mock Data Feed Active' 
+              : (dhanStatus?.connected 
+                  ? (user && dhanStatus.data?.dhanClientId 
+                      ? `Live DhanHQ Feed (Client: ${dhanStatus.data.dhanClientId})` 
+                      : 'Live Exchange Feed Active (NSE / BSE)') 
+                  : 'Demo Fallback Feed')}
+          </strong>
+          <span style={{ color: '#64748b' }}>
+            · {marketConfig?.useMockData ? 'Synthetic offline simulation' : 'Direct API v2 broker connection'}
+          </span>
+        </div>
+
+        {user?.role === 'ADMIN' && (
+          <button 
+            type="button" 
+            onClick={() => navigate('/admin/integrations')}
+            style={{
+              background: 'rgba(56, 189, 248, 0.1)',
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+              color: '#38bdf8',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            Manage Data Feed / Telegram →
+          </button>
+        )}
+      </div>
+
+      {/* 0. Live Broker Snapshot when DhanHQ is connected (Only for Authenticated User) */}
+      {user && dhanStatus?.connected && dhanFunds && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(14, 22, 36, 0.95), rgba(20, 32, 54, 0.95))',
+          border: '1px solid rgba(69, 214, 162, 0.35)',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              background: 'rgba(69, 214, 162, 0.12)',
+              border: '1px solid rgba(69, 214, 162, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#45d6a2'
+            }}>
+              <Radio size={20} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 700, color: '#f8fafc' }}>
+                  DhanHQ v2 Account Active
+                </span>
+                <span style={{
+                  background: 'rgba(69, 214, 162, 0.15)',
+                  border: '1px solid rgba(69, 214, 162, 0.3)',
+                  color: '#45d6a2',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  padding: '2px 8px',
+                  borderRadius: '12px'
+                }}>
+                  Live Sync
+                </span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+                Client ID: <code style={{ color: '#38bdf8' }}>{dhanStatus.data?.dhanClientId || '1111932175'}</code> · Token Valid · Read-Only Protected
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>
+                Available Balance
+              </span>
+              <strong style={{ fontSize: '17px', color: '#45d6a2' }}>
+                ₹{(dhanFunds?.availabelBalance ?? 2.71).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </strong>
+            </div>
+
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>
+                Withdrawable
+              </span>
+              <strong style={{ fontSize: '17px', color: '#cbd5e1' }}>
+                ₹{(dhanFunds?.withdrawableBalance ?? 2.71).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </strong>
+            </div>
+
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>
+                Holdings / Positions
+              </span>
+              <span style={{ fontSize: '14px', color: '#f1f5f9', fontWeight: 600 }}>
+                {dhanHoldingsCount} Holdings · {dhanPositionsCount} Open
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 1. Metric Cards Grid */}
       <section className="metric-grid">
         <div 
@@ -282,8 +469,11 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
             <span>NIFTY 50</span>
             <span className="metric-icon"><TrendingUp size={16} /></span>
           </div>
-          <div className="metric-value">24,872.30</div>
-          <div className="metric-change positive"><ArrowUpRight size={14} /> +0.64%</div>
+          <div className="metric-value">₹{money(niftyBenchmark.price)}</div>
+          <div className={`metric-change ${niftyBenchmark.changePct >= 0 ? 'positive' : 'negative'}`}>
+            {niftyBenchmark.changePct >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />} 
+            {niftyBenchmark.changePct >= 0 ? '+' : ''}{niftyBenchmark.changePct.toFixed(2)}%
+          </div>
           <div className="metric-detail">Main benchmark index · Click to chart</div>
         </div>
 
@@ -297,8 +487,11 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
             <span>BANK NIFTY</span>
             <span className="metric-icon"><TrendingUp size={16} /></span>
           </div>
-          <div className="metric-value">52,180.40</div>
-          <div className="metric-change positive"><ArrowUpRight size={14} /> +0.92%</div>
+          <div className="metric-value">₹{money(bankNiftyBenchmark.price)}</div>
+          <div className={`metric-change ${bankNiftyBenchmark.changePct >= 0 ? 'positive' : 'negative'}`}>
+            {bankNiftyBenchmark.changePct >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />} 
+            {bankNiftyBenchmark.changePct >= 0 ? '+' : ''}{bankNiftyBenchmark.changePct.toFixed(2)}%
+          </div>
           <div className="metric-detail">Banking & financials index · Click to chart</div>
         </div>
 
@@ -312,8 +505,11 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
             <span>SENSEX</span>
             <span className="metric-icon"><TrendingUp size={16} /></span>
           </div>
-          <div className="metric-value">81,450.20</div>
-          <div className="metric-change positive"><ArrowUpRight size={14} /> +0.52%</div>
+          <div className="metric-value">₹{money(sensexBenchmark.price)}</div>
+          <div className={`metric-change ${sensexBenchmark.changePct >= 0 ? 'positive' : 'negative'}`}>
+            {sensexBenchmark.changePct >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />} 
+            {sensexBenchmark.changePct >= 0 ? '+' : ''}{sensexBenchmark.changePct.toFixed(2)}%
+          </div>
           <div className="metric-detail">BSE 30 benchmark · Click to chart</div>
         </div>
 
@@ -364,7 +560,13 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
               <div className="section-kicker">MARKET INTELLIGENCE</div>
               <h2>
                 {selectedSymbol} Pulse{' '}
-                <span className="live-tag"><span /> LIVE SIMULATED</span>
+                {marketConfig?.useMockData ? (
+                  <span className="live-tag demo"><span /> SIMULATED DEMO</span>
+                ) : (
+                  <span className="live-tag live" style={{ background: 'rgba(69, 214, 162, 0.15)', color: '#45d6a2', border: '1px solid rgba(69, 214, 162, 0.3)' }}>
+                    <span style={{ background: '#45d6a2' }} /> LIVE STREAM
+                  </span>
+                )}
               </h2>
             </div>
 

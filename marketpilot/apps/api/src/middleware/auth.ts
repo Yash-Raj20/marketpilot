@@ -45,8 +45,8 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   }
 
   try {
-    const payload = jwt.verify(token, secret()) as { sub: string; email: string; role?: 'USER' | 'ADMIN' };
-    req.user = { id: payload.sub, email: payload.email, role: payload.role || 'USER' };
+    const payload = jwt.verify(token, secret()) as { sub: string; email: string; role?: 'USER' | 'ADMIN'; name?: string };
+    req.user = { id: payload.sub, email: payload.email, role: payload.role || 'USER', name: payload.name || payload.email.split('@')[0] };
     next();
   } catch {
     return res.status(401).json({ error: 'Session expired or token is invalid. Please sign in again.' });
@@ -60,6 +60,26 @@ export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction
     }
     next();
   });
+}
+
+export function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction) {
+  let token = (req as Request & { cookies?: Record<string, string> }).cookies?.[COOKIE_NAME];
+  if (!token && req.headers.cookie) {
+    const match = req.headers.cookie.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`));
+    if (match) token = decodeURIComponent(match[1]);
+  }
+  if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+    token = req.headers.authorization.slice(7);
+  }
+  if (token) {
+    try {
+      const payload = jwt.verify(token, secret()) as { sub: string; email: string; role?: 'USER' | 'ADMIN'; name?: string };
+      req.user = { id: payload.sub, email: payload.email, role: payload.role || 'USER', name: payload.name || payload.email.split('@')[0] };
+    } catch {
+      // ignore expired / invalid token
+    }
+  }
+  next();
 }
 
 export function createToken(user: { id: string; email: string; role?: string }) {

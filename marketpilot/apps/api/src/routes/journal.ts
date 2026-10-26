@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import type { AuthRequest } from '../types.js';
+import { sendTelegramTradeAlert } from '../services/telegram.js';
+
 const router = Router();
 router.use(requireAuth);
 router.get('/', async (req: AuthRequest, res, next) => {
@@ -12,6 +14,18 @@ router.post('/', async (req: AuthRequest, res, next) => {
   try {
     const input = z.object({ symbol: z.string().trim().min(1).max(20).regex(/^[A-Za-z0-9 ._-]+$/), side: z.enum(['BUY','SELL']), entryPrice: z.number().positive().max(100000000), quantity: z.number().int().positive().max(10000000), notes: z.string().max(2000).optional() }).parse(req.body);
     const entry = await prisma.journalEntry.create({ data: { ...input, symbol: input.symbol.toUpperCase(), userId: req.user!.id } });
+
+    // Broadcast to Telegram asynchronously without blocking response
+    sendTelegramTradeAlert({
+      symbol: entry.symbol,
+      type: entry.side,
+      entryPrice: Number(entry.entryPrice),
+      quantity: entry.quantity,
+      notes: entry.notes || undefined
+    }).catch((err: unknown) => {
+      console.warn('[Journal] Telegram alert dispatch failed:', err);
+    });
+
     res.status(201).json({ entry });
   } catch (e) { next(e); }
 });

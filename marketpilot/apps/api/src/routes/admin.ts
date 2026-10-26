@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { requireAdmin } from '../middleware/auth.js';
 import type { AuthRequest } from '../types.js';
+import { getDhanStatus, getDhanFundLimits, getDhanHoldings, getDhanPositions } from '../services/dhan.js';
+import { getTelegramBotInfo, getTelegramConfig, sendTelegramMessage, sendTelegramBroadcast } from '../services/telegram.js';
 
 const router = Router();
 
@@ -483,6 +485,122 @@ router.delete('/alerts/:id', async (req: AuthRequest, res, next) => {
     const id = String(req.params.id);
     await prisma.platformAlert.delete({ where: { id } });
     res.json({ message: 'Alert removed.' });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// 7. INTEGRATIONS MONITOR & MANAGEMENT (DHAN & TELEGRAM)
+router.get('/integrations/status', async (_req, res, next) => {
+  try {
+    const [dhanStatus, telegramBot] = await Promise.all([
+      getDhanStatus(),
+      getTelegramBotInfo()
+    ]);
+
+    const telegramConfig = getTelegramConfig();
+
+    res.json({
+      useMockData: process.env.USE_MOCK_DATA === 'true',
+      dhan: dhanStatus,
+      telegram: {
+        configured: Boolean(telegramConfig?.botToken),
+        connected: telegramBot.success,
+        bot: telegramBot.bot,
+        chatId: telegramConfig?.defaultChatId,
+        error: telegramBot.error
+      }
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/integrations/toggle-mock', async (req: AuthRequest, res, next) => {
+  try {
+    const current = process.env.USE_MOCK_DATA === 'true';
+    process.env.USE_MOCK_DATA = (!current).toString();
+    const newStatus = process.env.USE_MOCK_DATA === 'true';
+
+    await prisma.auditEvent.create({
+      data: {
+        userId: req.user!.id,
+        action: `DATA_MODE_TOGGLED_${newStatus ? 'MOCK' : 'LIVE_DHAN'}`
+      }
+    });
+
+    res.json({
+      useMockData: newStatus,
+      message: `Data mode switched to: ${newStatus ? 'Mock / Demo Data' : 'Live DhanHQ Broker Data'}`
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/integrations/telegram-test', async (req: AuthRequest, res, next) => {
+  try {
+    const { chatId } = z.object({
+      chatId: z.string().optional()
+    }).parse(req.body);
+
+    const testMsg = `
+<b>🤖 MarketPilot AI — Admin Dispatch Test</b>
+━━━━━━━━━━━━━━━━━━━━
+<b>Status:</b> ✅ Operational
+<b>Admin:</b> ${req.user?.name || req.user?.email || 'Platform Admin'}
+<b>Time:</b> ${new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
+<b>Integration:</b> Telegram Bot Connected
+━━━━━━━━━━━━━━━━━━━━
+<i>MarketPilot AI System Control</i>
+    `.trim();
+
+    const result = await sendTelegramMessage(testMsg, { chatId });
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    await prisma.auditEvent.create({
+      data: {
+        userId: req.user!.id,
+        action: 'TELEGRAM_TEST_ALERT_SENT'
+      }
+    });
+
+    res.json({
+      success: true,
+      messageId: result.messageId,
+      message: 'Test message delivered to Telegram!'
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/integrations/telegram-broadcast', async (req: AuthRequest, res, next) => {
+  try {
+    const { title, message, chatId } = z.object({
+      title: z.string().min(2),
+      message: z.string().min(5),
+      chatId: z.string().optional()
+    }).parse(req.body);
+
+    const result = await sendTelegramBroadcast(title, message, chatId);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    await prisma.auditEvent.create({
+      data: {
+        userId: req.user!.id,
+        action: `TELEGRAM_BROADCAST: ${title.slice(0, 40)}`
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Broadcast sent to Telegram channel!'
+    });
   } catch (e) {
     next(e);
   }

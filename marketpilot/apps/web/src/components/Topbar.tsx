@@ -30,6 +30,8 @@ interface TopbarProps {
   onShowToast: (msg: string) => void;
   onLogout?: () => void;
   activeAlerts?: PlatformAlert[];
+  dhanConnected?: boolean;
+  dhanClientId?: string;
 }
 
 const pageConfig: Record<string, { title: string; icon: any }> = {
@@ -51,7 +53,7 @@ const pageConfig: Record<string, { title: string; icon: any }> = {
   '/admin/profile': { title: 'Admin Profile & Security', icon: UserCheck }
 };
 
-export function Topbar({ user, onOpenMobileMenu, onOpenAuth, onShowToast, onLogout, activeAlerts }: TopbarProps) {
+export function Topbar({ user, onOpenMobileMenu, onOpenAuth, onShowToast, onLogout, activeAlerts, dhanConnected, dhanClientId }: TopbarProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -207,9 +209,18 @@ export function Topbar({ user, onOpenMobileMenu, onOpenAuth, onShowToast, onLogo
             )}
 
             {/* Pulsating Market Status */}
-            <div className="market-status" title="Simulated Indian Market Feed">
-              <span className="status-dot pulsing" />
-              <span>NSE/BSE · Live Demo</span>
+            <div 
+              className="market-status" 
+              title={dhanConnected ? `Connected to DhanHQ API v2 (Client ID: ${dhanClientId})` : 'Simulated Indian Market Feed'}
+              style={dhanConnected ? { borderColor: 'rgba(69, 214, 162, 0.35)', background: 'rgba(69, 214, 162, 0.08)' } : undefined}
+            >
+              <span 
+                className="status-dot pulsing" 
+                style={dhanConnected ? { background: '#45d6a2', boxShadow: '0 0 8px rgba(69, 214, 162, 0.6)' } : undefined} 
+              />
+              <span style={dhanConnected ? { color: '#45d6a2', fontWeight: 600 } : undefined}>
+                {dhanConnected ? (user ? `DhanHQ · Live v2 (${dhanClientId || 'Active'})` : 'NSE/BSE · Live Feed') : 'NSE/BSE · Live Demo'}
+              </span>
             </div>
           </>
         )}
