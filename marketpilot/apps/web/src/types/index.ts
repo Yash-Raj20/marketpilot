@@ -3,6 +3,9 @@ export interface Stock {
   name: string;
   price: number;
   changePct: number;
+  change3d?: number;
+  change1w?: number;
+  change1m?: number;
   category: string;
   volume?: string;
   rsi?: number;

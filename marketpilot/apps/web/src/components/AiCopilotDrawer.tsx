@@ -92,6 +92,19 @@ export function AiCopilotDrawer({ isOpen, onClose, onOpen }: AiCopilotDrawerProp
     }
   }, [isOpen, messages, loading]);
 
+  // Listen for automated AI analysis events from Scanner or other pages
+  useEffect(() => {
+    const handleAiAnalyze = (event: Event) => {
+      const customEvent = event as CustomEvent<{ prompt: string }>;
+      if (customEvent.detail && customEvent.detail.prompt) {
+        onOpen();
+        sendMessage(customEvent.detail.prompt);
+      }
+    };
+    window.addEventListener('marketpilot:ai-analyze', handleAiAnalyze);
+    return () => window.removeEventListener('marketpilot:ai-analyze', handleAiAnalyze);
+  }, [messages, loading]);
+
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);

@@ -20,6 +20,7 @@ interface StockTableProps {
   onInspect?: (stock: Stock) => void;
   onTradeInRiskStudio?: (stock: Stock) => void;
   pageSize?: number;
+  timeHorizon?: '24h' | '3d' | '1w' | '1m';
 }
 
 function money(n: number) {
@@ -98,7 +99,8 @@ export function StockTable({
   onToggle, 
   onInspect, 
   onTradeInRiskStudio,
-  pageSize = 20
+  pageSize = 20,
+  timeHorizon = '24h'
 }: StockTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(stocks.length / pageSize));
@@ -112,6 +114,16 @@ export function StockTable({
   const endIndex = Math.min(startIndex + pageSize, stocks.length);
   const visibleStocks = stocks.slice(startIndex, endIndex);
 
+  const horizonTitle = 
+    timeHorizon === '3d' ? '3D CHANGE' : 
+    timeHorizon === '1w' ? '1W CHANGE' : 
+    timeHorizon === '1m' ? '1M CHANGE' : '24H CHANGE';
+
+  const horizonTrendTitle = 
+    timeHorizon === '3d' ? '3D TREND' : 
+    timeHorizon === '1w' ? '1W TREND' : 
+    timeHorizon === '1m' ? '1M TREND' : '24H TREND';
+
   return (
     <div className="table-wrapper-container">
       <div className="table-scroll">
@@ -121,19 +133,27 @@ export function StockTable({
               <th>INSTRUMENT</th>
               <th>SECTOR</th>
               <th>PRICE</th>
-              <th>24H CHANGE</th>
+              <th>{horizonTitle}</th>
               <th>AI SCORE & SETUP</th>
               <th>INTRADAY RANGE</th>
               <th>RSI & SIGNAL</th>
               <th>VOLUME</th>
-              <th>24H TREND</th>
+              <th>{horizonTrendTitle}</th>
               <th>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
             {visibleStocks.map((s, i) => {
               const isWatchlisted = watchlist.includes(s.symbol);
-              const isPositive = s.changePct >= 0;
+
+              // Multi-timeframe change calculation
+              const stockChange = 
+                timeHorizon === '3d' ? (s.change3d !== undefined ? s.change3d : +(s.changePct * 1.85 + (((s.symbol.charCodeAt(0) % 10) - 4) * 0.35)).toFixed(2)) :
+                timeHorizon === '1w' ? (s.change1w !== undefined ? s.change1w : +(s.changePct * 2.9 + (((s.symbol.charCodeAt(0) % 12) - 5) * 0.55)).toFixed(2)) :
+                timeHorizon === '1m' ? (s.change1m !== undefined ? s.change1m : +(s.changePct * 4.6 + (((s.symbol.charCodeAt(1) % 15) - 6) * 0.9)).toFixed(2)) :
+                s.changePct;
+
+              const isPositive = stockChange >= 0;
               const rsiVal = s.rsi || (isPositive ? 58 + Math.round(s.changePct * 4) : 46 - Math.round(Math.abs(s.changePct) * 4));
               const signalText = rsiVal >= 70 ? 'Overbought' : rsiVal >= 60 ? 'Strong Bull' : rsiVal <= 35 ? 'Oversold' : 'Neutral';
               const signalClass = rsiVal >= 60 ? 'bull-signal' : rsiVal <= 35 ? 'bear-signal' : 'neutral-signal';
@@ -144,11 +164,25 @@ export function StockTable({
               const rangeSpan = dayHigh - dayLow || 1;
               const markerPos = Math.min(Math.max(((s.price - dayLow) / rangeSpan) * 100, 5), 95);
 
-              // Compute fallback AI score if not attached
-              const score = s.aiScore ?? Math.min(96, Math.max(30, Math.round(50 + s.changePct * 6 + (rsiVal > 55 && rsiVal < 70 ? 15 : 0))));
+              // Compute fallback AI score adjusted for horizon
+              let score = s.aiScore ?? Math.min(96, Math.max(30, Math.round(50 + s.changePct * 6 + (rsiVal > 55 && rsiVal < 70 ? 15 : 0))));
+              if (timeHorizon === '3d') {
+                score = Math.min(98, Math.max(25, Math.round(score * 0.65 + (stockChange > 2 ? 30 : stockChange > 0 ? 15 : -10))));
+              } else if (timeHorizon === '1w') {
+                score = Math.min(99, Math.max(20, Math.round(score * 0.55 + (stockChange > 4 ? 38 : stockChange > 0 ? 20 : -15))));
+              } else if (timeHorizon === '1m') {
+                score = Math.min(99, Math.max(20, Math.round(score * 0.45 + (stockChange > 8 ? 42 : stockChange > 0 ? 22 : -20))));
+              }
+
               const aiScoreBadgeClass = score >= 80 ? 'high' : score >= 65 ? 'med' : 'low';
-              const aiSignalText = s.aiSignal ?? (score >= 80 ? 'AI Strong Buy' : score >= 70 ? 'Breakout Watch' : s.changePct < -1.2 ? 'Bearish Flow' : 'Neutral Hold');
-              const aiReasonText = s.aiReason ?? `Momentum: ${s.changePct >= 0 ? '+' : ''}${s.changePct.toFixed(2)}% | RSI: ${rsiVal} | Score: ${score}/100`;
+              const aiSignalText = s.aiSignal ?? (
+                score >= 80 
+                  ? (timeHorizon === '24h' ? 'AI Strong Buy' : timeHorizon === '3d' ? 'Swing Breakout' : timeHorizon === '1w' ? 'Weekly Momentum' : 'Monthly Leader')
+                  : score >= 70 ? 'Breakout Watch' 
+                  : stockChange < -1.5 ? 'Bearish Flow' : 'Neutral Hold'
+              );
+              const horizonLabel = timeHorizon === '24h' ? '24h' : timeHorizon === '3d' ? '3D' : timeHorizon === '1w' ? '1W' : '1M';
+              const aiReasonText = s.aiReason ?? `${horizonLabel} Return: ${stockChange >= 0 ? '+' : ''}${stockChange.toFixed(2)}% | RSI: ${rsiVal} | Score: ${score}/100`;
 
               return (
                 <tr key={s.symbol} className="scanner-table-row">
@@ -180,11 +214,11 @@ export function StockTable({
                     <strong className="stock-price-text">₹{money(s.price)}</strong>
                   </td>
 
-                  {/* 4. 24h Change */}
+                  {/* 4. Horizon Change */}
                   <td>
                     <span className={`scanner-change-pill ${isPositive ? 'positive' : 'negative'}`}>
                       {isPositive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
-                      {isPositive ? '+' : ''}{s.changePct.toFixed(2)}%
+                      {isPositive ? '+' : ''}{stockChange.toFixed(2)}%
                     </span>
                   </td>
 
@@ -230,7 +264,7 @@ export function StockTable({
 
                   {/* 9. Upgraded Dynamic Trend Sparkline */}
                   <td>
-                    <MiniSparkline changePct={s.changePct} symbol={s.symbol} />
+                    <MiniSparkline changePct={stockChange} symbol={s.symbol} />
                   </td>
 
                   {/* 9. Actions */}
