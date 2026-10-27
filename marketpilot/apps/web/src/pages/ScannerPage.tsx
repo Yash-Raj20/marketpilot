@@ -14,12 +14,14 @@ import {
   BookOpen, 
   ArrowUpRight,
   ChevronDown,
-  RefreshCw
+  RefreshCw,
+  RotateCcw
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { StockTable } from '../components/StockTable';
 import { CustomSelect } from '../components/CustomSelect';
+import { StockInspectorModal } from '../components/StockInspectorModal';
 import { api } from '../lib/api';
 import type { Stock } from '../types';
 
@@ -30,7 +32,7 @@ interface ScannerPageProps {
 }
 
 type PresetFilter = 'all' | 'ai-picks' | 'gainers' | 'losers' | 'momentum' | 'breakout' | 'dip' | 'watchlist';
-type SortOption = 'ai-desc' | 'change-desc' | 'change-asc' | 'rsi-desc' | 'rsi-asc' | 'price-desc' | 'price-asc' | 'symbol-asc';
+type SortOption = 'all' | 'ai-desc' | 'change-desc' | 'change-asc' | 'rsi-desc' | 'rsi-asc' | 'price-desc' | 'price-asc' | 'symbol-asc';
 
 function money(n: number) {
   return n.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
@@ -44,13 +46,20 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
   const [query, setQuery] = useState('');
   const [activePreset, setActivePreset] = useState<PresetFilter>('all');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
-  const [sortBy, setSortBy] = useState<SortOption>('change-desc');
+  const [sortBy, setSortBy] = useState<SortOption>('all');
 
   // Live exchange state
   const [liveStocks, setLiveStocks] = useState<Stock[]>(stocks);
   const [dataMode, setDataMode] = useState<'LIVE_EXCHANGE' | 'DEMO' | 'FALLBACK'>('LIVE_EXCHANGE');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [inspectedChartPoints, setInspectedChartPoints] = useState<Array<{ t: string; v: number }>>([]);
+
+  // Sync prop stocks if liveStocks is empty or props update
+  useEffect(() => {
+    if (stocks && stocks.length > 0 && liveStocks.length === 0) {
+      setLiveStocks(stocks);
+    }
+  }, [stocks]);
 
   const currentStocksList = liveStocks.length > 0 ? liveStocks : stocks;
 
@@ -70,6 +79,14 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
   useEffect(() => {
     refreshStocks();
   }, []);
+
+  // One-click reset to display all instruments cleanly
+  const handleResetToAll = () => {
+    setActivePreset('all');
+    setSelectedSector('ALL');
+    setQuery('');
+    setSortBy('all');
+  };
 
   // Deep-dive Inspector modal state
   const [inspectedStock, setInspectedStock] = useState<Stock | null>(null);
@@ -129,6 +146,7 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
   }, [sectors, currentStocksList]);
 
   const sortOptions = useMemo(() => [
+    { value: 'all' as const, label: '🌐 All / Default Order' },
     { value: 'ai-desc' as const, label: '✨ AI Score (Highest First)' },
     { value: 'change-desc' as const, label: '🔥 24h Gainers (High to Low)' },
     { value: 'change-asc' as const, label: '🔻 24h Losers (Low to High)' },
@@ -143,25 +161,32 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
   const filteredStocks = useMemo(() => {
     return currentStocksList
       .filter(s => {
-        // 1. Text Query
-        const matchQuery = `${s.symbol} ${s.name} ${s.category}`.toLowerCase().includes(query.toLowerCase());
-        if (!matchQuery) return false;
+        // 1. Text Query Filter
+        if (query.trim()) {
+          const q = query.trim().toLowerCase();
+          const matchQuery = `${s.symbol} ${s.name} ${s.category || ''}`.toLowerCase().includes(q);
+          if (!matchQuery) return false;
+        }
 
         // 2. Sector Filter
-        if (selectedSector !== 'ALL' && s.category !== selectedSector) return false;
+        if (selectedSector !== 'ALL') {
+          if (!s.category || s.category.trim().toLowerCase() !== selectedSector.trim().toLowerCase()) {
+            return false;
+          }
+        }
 
         // 3. Preset Filter
         if (activePreset === 'ai-picks') return (s.aiScore ?? 0) >= 75 || ((s.rsi || 50) >= 60 && s.changePct > 1.0);
         if (activePreset === 'gainers') return s.changePct > 0;
         if (activePreset === 'losers') return s.changePct < 0;
-        if (activePreset === 'momentum') return s.changePct >= 1.0;
         if (activePreset === 'breakout') return (s.rsi || 50) >= 65 || s.changePct >= 1.5;
-        if (activePreset === 'dip') return s.changePct < 0;
+        if (activePreset === 'dip') return s.changePct < 0 && ((s.rsi || 50) <= 45 || s.changePct <= -1.0);
         if (activePreset === 'watchlist') return watchlist.includes(s.symbol);
 
         return true;
       })
       .sort((a, b) => {
+        if (sortBy === 'all') return 0;
         if (sortBy === 'ai-desc') return (b.aiScore ?? 50) - (a.aiScore ?? 50);
         if (sortBy === 'change-desc') return b.changePct - a.changePct;
         if (sortBy === 'change-asc') return a.changePct - b.changePct;
@@ -180,9 +205,13 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
     const bullish = currentStocksList.filter(s => s.changePct > 0).length;
     const bearish = currentStocksList.filter(s => s.changePct < 0).length;
     const aiTopCount = currentStocksList.filter(s => (s.aiScore ?? 0) >= 75 || ((s.rsi || 50) >= 60 && s.changePct > 1.0)).length;
+    const breakoutCount = currentStocksList.filter(s => (s.rsi || 50) >= 65 || s.changePct >= 1.5).length;
+    const dipCount = currentStocksList.filter(s => s.changePct < 0 && ((s.rsi || 50) <= 45 || s.changePct <= -1.0)).length;
     const topGainer = [...currentStocksList].sort((a, b) => b.changePct - a.changePct)[0];
-    return { total, bullish, bearish, aiTopCount, topGainer };
+    return { total, bullish, bearish, aiTopCount, breakoutCount, dipCount, topGainer };
   }, [currentStocksList]);
+
+  const isFiltered = activePreset !== 'all' || selectedSector !== 'ALL' || query.trim() !== '' || sortBy !== 'all';
 
   return (
     <section className="panel page-panel scanner-wrapper-panel">
@@ -261,8 +290,9 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
       <div className="scanner-presets-bar">
         <button
           type="button"
-          className={`preset-chip ${activePreset === 'all' ? 'active' : ''}`}
-          onClick={() => setActivePreset('all')}
+          className={`preset-chip ${activePreset === 'all' && selectedSector === 'ALL' && !query.trim() && sortBy === 'all' ? 'active' : ''}`}
+          onClick={handleResetToAll}
+          title="Show all instruments and reset all filters"
         >
           All Instruments ({currentStocksList.length})
         </button>
@@ -299,16 +329,22 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
         <button
           type="button"
           className={`preset-chip ${activePreset === 'breakout' ? 'active' : ''}`}
-          onClick={() => setActivePreset('breakout')}
+          onClick={() => {
+            setActivePreset('breakout');
+            setSortBy('change-desc');
+          }}
         >
-          <Zap size={13} /> Breakout Setups
+          <Zap size={13} /> ⚡ Breakout Setups ({metrics.breakoutCount})
         </button>
         <button
           type="button"
           className={`preset-chip ${activePreset === 'dip' ? 'active' : ''}`}
-          onClick={() => setActivePreset('dip')}
+          onClick={() => {
+            setActivePreset('dip');
+            setSortBy('rsi-asc');
+          }}
         >
-          <TrendingDown size={13} /> Pullback / Dip Buy
+          <TrendingDown size={13} /> 🎯 Pullback / Dip Buy ({metrics.dipCount})
         </button>
         <button
           type="button"
@@ -364,15 +400,33 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
           <CustomSelect
             value={sortBy}
             options={sortOptions}
-            onChange={(val) => setSortBy(val as SortOption)}
+            onChange={(val) => {
+              const nextSort = val as SortOption;
+              setSortBy(nextSort);
+              if (nextSort === 'all') {
+                setActivePreset('all');
+              }
+            }}
             minWidth={215}
           />
         </div>
 
-
-        {/* Result Counter badge */}
-        <div className="scanner-result-count">
-          Showing <strong>{filteredStocks.length}</strong> of {stocks.length}
+        {/* Result Counter & Reset Button */}
+        <div className="scanner-toolbar-right">
+          {isFiltered && (
+            <button
+              type="button"
+              className="scanner-reset-btn"
+              onClick={handleResetToAll}
+              title="Reset all filters and sorting"
+            >
+              <RotateCcw size={12} />
+              Reset Filters
+            </button>
+          )}
+          <div className="scanner-result-count">
+            Showing <strong>{filteredStocks.length}</strong> of {currentStocksList.length}
+          </div>
         </div>
       </div>
 
@@ -385,150 +439,21 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
         onTradeInRiskStudio={(stock) => navigate(`/risk-studio?symbol=${stock.symbol}&price=${stock.price}`)}
       />
 
-      {/* 5. Deep-Dive Stock Inspector Modal */}
-      {inspectedStock && (
-        <div className="modal-backdrop" onClick={() => setInspectedStock(null)}>
-          <div 
-            className="auth-modal stock-inspector-modal" 
-            onClick={(e) => e.stopPropagation()}
-            style={{ width: 'min(100%, 540px)' }}
-          >
-            <button 
-              className="modal-close" 
-              onClick={() => setInspectedStock(null)} 
-              aria-label="Close inspector"
-            >
-              <X size={18} />
-            </button>
-
-            {/* Header */}
-            <div className="inspector-head">
-              <div className="inspector-title-group">
-                <div className="inspector-avatar">
-                  {inspectedStock.symbol.slice(0, 2)}
-                </div>
-                <div>
-                  <div className="inspector-name-row">
-                    <h2>{inspectedStock.symbol}</h2>
-                    <span className="scanner-sector-badge">{inspectedStock.category}</span>
-                  </div>
-                  <small>{inspectedStock.name}</small>
-                </div>
-              </div>
-
-              <div className="inspector-price-col">
-                <strong>₹{money(inspectedStock.price)}</strong>
-                <span className={`scanner-change-pill ${inspectedStock.changePct >= 0 ? 'positive' : 'negative'}`}>
-                  {inspectedStock.changePct >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
-                  {inspectedStock.changePct >= 0 ? '+' : ''}{inspectedStock.changePct.toFixed(2)}%
-                </span>
-              </div>
-            </div>
-
-            {/* Interactive Recharts Area Chart for this stock */}
-            <div className="inspector-chart-box">
-              <ResponsiveContainer width="100%" height={170}>
-                <AreaChart data={inspectedChartPoints} margin={{ top: 10, right: 4, left: 4, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="inspectGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop 
-                        offset="0%" 
-                        stopColor={inspectedStock.changePct >= 0 ? '#43d6a2' : '#f87171'} 
-                        stopOpacity={0.32} 
-                      />
-                      <stop 
-                        offset="100%" 
-                        stopColor={inspectedStock.changePct >= 0 ? '#43d6a2' : '#f87171'} 
-                        stopOpacity={0.0} 
-                      />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 4" stroke="#1c2c3e" vertical={false} />
-                  <XAxis dataKey="t" axisLine={false} tickLine={false} tick={{ fill: '#6c7c93', fontSize: 10 }} />
-                  <YAxis domain={['dataMin - 10', 'dataMax + 10']} hide />
-                  <Tooltip
-                    contentStyle={{ 
-                      background: '#0d1828', 
-                      border: '1px solid #23354c', 
-                      borderRadius: 8, 
-                      color: '#fff',
-                      fontSize: '11px' 
-                    }}
-                    formatter={(v: any) => [`₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 'Price']}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="v"
-                    stroke={inspectedStock.changePct >= 0 ? '#43d6a2' : '#f87171'}
-                    strokeWidth={2.4}
-                    fill="url(#inspectGrad)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Key Statistics Grid */}
-            <div className="inspector-stats-grid">
-              <div className="stat-card">
-                <small>Day High</small>
-                <strong>₹{money(inspectedStock.dayHigh || inspectedStock.price * 1.012)}</strong>
-              </div>
-              <div className="stat-card">
-                <small>Day Low</small>
-                <strong>₹{money(inspectedStock.dayLow || inspectedStock.price * 0.988)}</strong>
-              </div>
-              <div className="stat-card">
-                <small>RSI (14)</small>
-                <strong className={inspectedStock.changePct >= 0 ? 'positive' : 'negative'}>
-                  {inspectedStock.rsi || (inspectedStock.changePct >= 0 ? 64 : 42)}
-                </strong>
-              </div>
-              <div className="stat-card">
-                <small>Volume</small>
-                <strong>{inspectedStock.volume || '2.4M'}</strong>
-              </div>
-            </div>
-
-            {/* Action Bar */}
-            <div className="inspector-actions-bar">
-              <button
-                type="button"
-                className={`secondary-btn ${watchlist.includes(inspectedStock.symbol) ? 'active-watch-btn' : ''}`}
-                onClick={() => onToggleWatch(inspectedStock.symbol)}
-              >
-                <Star size={15} fill={watchlist.includes(inspectedStock.symbol) ? 'currentColor' : 'none'} />
-                <span>{watchlist.includes(inspectedStock.symbol) ? 'In Watchlist' : 'Add to Watchlist'}</span>
-              </button>
-
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => {
-                  setInspectedStock(null);
-                  navigate('/journal');
-                }}
-              >
-                <BookOpen size={15} />
-                <span>Log to Journal</span>
-              </button>
-
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={() => {
-                  const sym = inspectedStock.symbol;
-                  const pr = inspectedStock.price;
-                  setInspectedStock(null);
-                  navigate(`/risk-studio?symbol=${sym}&price=${pr}`);
-                }}
-              >
-                <ShieldCheck size={16} />
-                <span>Plan Risk in Studio</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 5. Deep-Dive Stock Inspector Modal with Complete Details */}
+      <StockInspectorModal
+        stock={inspectedStock}
+        watchlist={watchlist}
+        onClose={() => setInspectedStock(null)}
+        onToggleWatch={onToggleWatch}
+        onPlanRisk={(s) => {
+          setInspectedStock(null);
+          navigate(`/risk-studio?symbol=${s.symbol}&price=${s.price}`);
+        }}
+        onLogJournal={(s) => {
+          setInspectedStock(null);
+          navigate(`/journal?symbol=${s.symbol}&price=${s.price}`);
+        }}
+      />
     </section>
   );
 }

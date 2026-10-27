@@ -8,6 +8,9 @@ export interface Stock {
   rsi?: number;
   dayHigh?: number;
   dayLow?: number;
+  week52High?: number;
+  week52Low?: number;
+  peRatio?: number;
   aiScore?: number;
   aiSignal?: string;
   aiReason?: string;

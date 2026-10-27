@@ -103,12 +103,10 @@ export function StockTable({
   const [currentPage, setCurrentPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(stocks.length / pageSize));
 
-  // Reset page to 1 when current page exceeds new totalPages (e.g. after filter change)
+  // Reset page to 1 whenever stocks change or current page exceeds totalPages
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(1);
-    }
-  }, [stocks.length, totalPages, currentPage]);
+    setCurrentPage(1);
+  }, [stocks]);
 
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = Math.min(startIndex + pageSize, stocks.length);

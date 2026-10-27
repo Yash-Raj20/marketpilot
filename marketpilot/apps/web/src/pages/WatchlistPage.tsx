@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { StockTable } from '../components/StockTable';
 import { CustomSelect } from '../components/CustomSelect';
+import { StockInspectorModal } from '../components/StockInspectorModal';
 import type { Stock, User } from '../types';
 
 interface WatchlistPageProps {
@@ -288,150 +289,21 @@ export function WatchlistPage({ stocks, watchlist, user, onToggleWatch }: Watchl
         </div>
       )}
 
-      {/* 5. Deep-Dive Inspection Modal */}
-      {inspectedStock && (
-        <div className="modal-backdrop" onClick={() => setInspectedStock(null)}>
-          <div 
-            className="auth-modal stock-inspector-modal" 
-            onClick={e => e.stopPropagation()}
-            style={{ width: 'min(100%, 540px)' }}
-          >
-            <button 
-              className="modal-close" 
-              onClick={() => setInspectedStock(null)} 
-              aria-label="Close inspector"
-            >
-              <X size={18} />
-            </button>
-
-            {/* Header */}
-            <div className="inspector-head">
-              <div className="inspector-title-group">
-                <div className="inspector-avatar">
-                  {inspectedStock.symbol.slice(0, 2)}
-                </div>
-                <div>
-                  <div className="inspector-name-row">
-                    <h2>{inspectedStock.symbol}</h2>
-                    <span className="scanner-sector-badge">{inspectedStock.category}</span>
-                  </div>
-                  <small>{inspectedStock.name}</small>
-                </div>
-              </div>
-
-              <div className="inspector-price-col">
-                <strong>₹{money(inspectedStock.price)}</strong>
-                <span className={`scanner-change-pill ${inspectedStock.changePct >= 0 ? 'positive' : 'negative'}`}>
-                  {inspectedStock.changePct >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
-                  {inspectedStock.changePct >= 0 ? '+' : ''}{inspectedStock.changePct.toFixed(2)}%
-                </span>
-              </div>
-            </div>
-
-            {/* Interactive Area Chart */}
-            <div className="inspector-chart-box">
-              <ResponsiveContainer width="100%" height={170}>
-                <AreaChart data={inspectedChartPoints} margin={{ top: 10, right: 4, left: 4, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="watchInspectGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop 
-                        offset="0%" 
-                        stopColor={inspectedStock.changePct >= 0 ? '#43d6a2' : '#f87171'} 
-                        stopOpacity={0.32} 
-                      />
-                      <stop 
-                        offset="100%" 
-                        stopColor={inspectedStock.changePct >= 0 ? '#43d6a2' : '#f87171'} 
-                        stopOpacity={0.0} 
-                      />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 4" stroke="#1c2c3e" vertical={false} />
-                  <XAxis dataKey="t" axisLine={false} tickLine={false} tick={{ fill: '#6c7c93', fontSize: 10 }} />
-                  <YAxis domain={['dataMin - 10', 'dataMax + 10']} hide />
-                  <Tooltip
-                    contentStyle={{ 
-                      background: '#0d1828', 
-                      border: '1px solid #23354c', 
-                      borderRadius: 8, 
-                      color: '#fff',
-                      fontSize: '11px' 
-                    }}
-                    formatter={(v: any) => [`₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 'Price']}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="v"
-                    stroke={inspectedStock.changePct >= 0 ? '#43d6a2' : '#f87171'}
-                    strokeWidth={2.4}
-                    fill="url(#watchInspectGrad)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Stats */}
-            <div className="inspector-stats-grid">
-              <div className="stat-card">
-                <small>Day High</small>
-                <strong>₹{money(inspectedStock.dayHigh || inspectedStock.price * 1.012)}</strong>
-              </div>
-              <div className="stat-card">
-                <small>Day Low</small>
-                <strong>₹{money(inspectedStock.dayLow || inspectedStock.price * 0.988)}</strong>
-              </div>
-              <div className="stat-card">
-                <small>RSI (14)</small>
-                <strong className={inspectedStock.changePct >= 0 ? 'positive' : 'negative'}>
-                  {inspectedStock.rsi || (inspectedStock.changePct >= 0 ? 64 : 42)}
-                </strong>
-              </div>
-              <div className="stat-card">
-                <small>Volume</small>
-                <strong>{inspectedStock.volume || '2.4M'}</strong>
-              </div>
-            </div>
-
-            {/* Action Bar */}
-            <div className="inspector-actions-bar">
-              <button
-                type="button"
-                className={`secondary-btn ${watchlist.includes(inspectedStock.symbol) ? 'active-watch-btn' : ''}`}
-                onClick={() => onToggleWatch(inspectedStock.symbol)}
-              >
-                <Star size={15} fill={watchlist.includes(inspectedStock.symbol) ? 'currentColor' : 'none'} />
-                <span>{watchlist.includes(inspectedStock.symbol) ? 'In Watchlist' : 'Add to Watchlist'}</span>
-              </button>
-
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => {
-                  setInspectedStock(null);
-                  navigate('/journal');
-                }}
-              >
-                <BookOpen size={15} />
-                <span>Log to Journal</span>
-              </button>
-
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={() => {
-                  const sym = inspectedStock.symbol;
-                  const pr = inspectedStock.price;
-                  setInspectedStock(null);
-                  navigate(`/risk-studio?symbol=${sym}&price=${pr}`);
-                }}
-              >
-                <ShieldCheck size={16} />
-                <span>Plan Risk in Studio</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 5. Deep-Dive Inspection Modal with Full Details */}
+      <StockInspectorModal
+        stock={inspectedStock}
+        watchlist={watchlist}
+        onClose={() => setInspectedStock(null)}
+        onToggleWatch={onToggleWatch}
+        onPlanRisk={(s) => {
+          setInspectedStock(null);
+          navigate(`/risk-studio?symbol=${s.symbol}&price=${s.price}`);
+        }}
+        onLogJournal={(s) => {
+          setInspectedStock(null);
+          navigate(`/journal?symbol=${s.symbol}&price=${s.price}`);
+        }}
+      />
     </section>
   );
 }
