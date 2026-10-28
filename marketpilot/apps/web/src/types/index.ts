@@ -20,6 +20,18 @@ export interface Stock {
   sparkline?: number[];
 }
 
+export interface MarketIndexItem {
+  symbol: string;
+  name: string;
+  price: number;
+  changePct: number;
+  category: 'Sectoral' | 'Broad' | 'Index' | string;
+  dayHigh?: number;
+  dayLow?: number;
+  volume?: string;
+  rsi?: number;
+}
+
 export interface User {
   id: string;
   name: string;

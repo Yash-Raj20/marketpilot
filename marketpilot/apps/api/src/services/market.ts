@@ -1,10 +1,70 @@
-// Comprehensive Indian Market Universe (55+ Instruments across all major NSE/BSE sectors)
+// Comprehensive Indian Market Universe (Sectoral Indices, Broad Indices & Top Equities)
+
+export interface MarketIndexRecord {
+  symbol: string;
+  name: string;
+  price: number;
+  changePct: number;
+  category: 'Sectoral' | 'Broad';
+  volume?: string;
+  rsi?: number;
+}
+
+// 1. Official NSE Sectoral Indices (Mirroring live NSE Heatmap)
+export const sectoralIndices: MarketIndexRecord[] = [
+  { symbol: 'NIFTY AUTO', name: 'Nifty Auto Index', price: 25411.35, changePct: 0.28, category: 'Sectoral', rsi: 56 },
+  { symbol: 'NIFTY BANK', name: 'Nifty Bank Index', price: 53781.85, changePct: -0.36, category: 'Sectoral', rsi: 48 },
+  { symbol: 'NIFTY FIN SERVICE', name: 'Nifty Financial Services', price: 24166.45, changePct: -0.56, category: 'Sectoral', rsi: 46 },
+  { symbol: 'NIFTY FMCG', name: 'Nifty FMCG Index', price: 42509.10, changePct: -1.41, category: 'Sectoral', rsi: 38 },
+  { symbol: 'NIFTY IT', name: 'Nifty IT Index', price: 31107.65, changePct: -3.36, category: 'Sectoral', rsi: 29 },
+  { symbol: 'NIFTY MEDIA', name: 'Nifty Media Index', price: 1612.20, changePct: -0.18, category: 'Sectoral', rsi: 50 },
+  { symbol: 'NIFTY METAL', name: 'Nifty Metal Index', price: 11744.70, changePct: -0.53, category: 'Sectoral', rsi: 47 },
+  { symbol: 'NIFTY PHARMA', name: 'Nifty Pharma Index', price: 26220.25, changePct: -0.18, category: 'Sectoral', rsi: 52 },
+  { symbol: 'NIFTY PSU BANK', name: 'Nifty PSU Bank Index', price: 8099.05, changePct: -0.34, category: 'Sectoral', rsi: 49 },
+  { symbol: 'NIFTY REALTY', name: 'Nifty Realty Index', price: 798.90, changePct: -0.76, category: 'Sectoral', rsi: 44 },
+  { symbol: 'NIFTY PVT BANK', name: 'Nifty Private Bank Index', price: 26471.70, changePct: -0.59, category: 'Sectoral', rsi: 45 },
+  { symbol: 'NIFTY HEALTHCARE', name: 'Nifty Healthcare Index', price: 15887.60, changePct: -0.19, category: 'Sectoral', rsi: 51 },
+  { symbol: 'NIFTY CONSR DUR', name: 'Nifty Consumer Durables', price: 34184.85, changePct: -0.20, category: 'Sectoral', rsi: 50 },
+  { symbol: 'NIFTY OIL AND GAS', name: 'Nifty Oil & Gas Index', price: 10380.85, changePct: -1.47, category: 'Sectoral', rsi: 36 },
+  { symbol: 'NIFTY CHEMICALS', name: 'Nifty Chemicals Index', price: 26826.75, changePct: -0.05, category: 'Sectoral', rsi: 50 },
+  { symbol: 'NIFTY500 HEALTHCARE', name: 'Nifty 500 Healthcare', price: 20756.10, changePct: 0.02, category: 'Sectoral', rsi: 52 },
+  { symbol: 'NIFTY MIDSMALL HEALTHCARE', name: 'Nifty MidSmall Healthcare', price: 50291.85, changePct: 0.43, category: 'Sectoral', rsi: 58 },
+  { symbol: 'NIFTY INFRA', name: 'Nifty Infrastructure', price: 8452.10, changePct: -0.32, category: 'Sectoral', rsi: 48 }
+];
+
+// 2. Official NSE Broad Market Indices (Mirroring live NSE Broad Indices Heatmap)
+export const broadIndices: MarketIndexRecord[] = [
+  { symbol: 'NIFTY 50', name: 'Nifty 50 Benchmark', price: 22563.10, changePct: -0.82, category: 'Broad', rsi: 43 },
+  { symbol: 'NIFTY NEXT 50', name: 'Nifty Next 50', price: 67115.80, changePct: -0.34, category: 'Broad', rsi: 48 },
+  { symbol: 'NIFTY MIDCAP 50', name: 'Nifty Midcap 50', price: 16383.10, changePct: -0.18, category: 'Broad', rsi: 51 },
+  { symbol: 'NIFTY MIDCAP 100', name: 'Nifty Midcap 100', price: 56831.50, changePct: -0.35, category: 'Broad', rsi: 49 },
+  { symbol: 'NIFTY MIDCAP 150', name: 'Nifty Midcap 150', price: 20924.60, changePct: -0.37, category: 'Broad', rsi: 48 },
+  { symbol: 'NIFTY SMLCAP 50', name: 'Nifty Smallcap 50', price: 9345.50, changePct: 0.40, category: 'Broad', rsi: 57 },
+  { symbol: 'NIFTY SMLCAP 100', name: 'Nifty Smallcap 100', price: 18501.10, changePct: 0.18, category: 'Broad', rsi: 54 },
+  { symbol: 'NIFTY SMLCAP 250', name: 'Nifty Smallcap 250', price: 16910.70, changePct: -0.14, category: 'Broad', rsi: 51 },
+  { symbol: 'NIFTY MIDSMAL 400', name: 'Nifty MidSmallcap 400', price: 19485.65, changePct: -0.29, category: 'Broad', rsi: 49 },
+  { symbol: 'NIFTY 100', name: 'Nifty 100', price: 23516.75, changePct: -0.73, category: 'Broad', rsi: 44 },
+  { symbol: 'NIFTY 200', name: 'Nifty 200', price: 12961.45, changePct: -0.66, category: 'Broad', rsi: 45 },
+  { symbol: 'NIFTY 500', name: 'Nifty 500', price: 21606.55, changePct: -0.59, category: 'Broad', rsi: 46 },
+  { symbol: 'NIFTY500 MULTICAP', name: 'Nifty 500 Multicap 50:25:25', price: 15311.45, changePct: -0.50, category: 'Broad', rsi: 47 },
+  { symbol: 'NIFTY LARGEMID 250', name: 'Nifty LargeMidcap 250', price: 15346.10, changePct: -0.56, category: 'Broad', rsi: 46 },
+  { symbol: 'NIFTY MID SELECT', name: 'Nifty Midcap Select', price: 13211.00, changePct: -0.07, category: 'Broad', rsi: 51 },
+  { symbol: 'NIFTY TOTAL MARKET', name: 'Nifty Total Market', price: 12211.55, changePct: -0.58, category: 'Broad', rsi: 46 },
+  { symbol: 'NIFTY MICROCAP 250', name: 'Nifty Microcap 250', price: 24270.45, changePct: -0.25, category: 'Broad', rsi: 50 },
+  { symbol: 'NIFTY FPI 150', name: 'Nifty FPI 150', price: 1452.80, changePct: -0.77, category: 'Broad', rsi: 44 },
+  { symbol: 'NIFTY500 LMS EQUAL', name: 'Nifty 500 LargeMidSmall Equal', price: 17086.05, changePct: -0.42, category: 'Broad', rsi: 47 },
+  { symbol: 'NIFTY SMALLCAP 50', name: 'Nifty Smallcap 50 Index', price: 19324.70, changePct: -0.15, category: 'Broad', rsi: 50 },
+  { symbol: 'SENSEX', name: 'BSE Sensex Benchmark', price: 81450.20, changePct: 0.52, category: 'Broad', rsi: 59 },
+  { symbol: 'INDIA VIX', name: 'India Volatility Index', price: 13.42, changePct: -2.10, category: 'Broad', rsi: 38 }
+];
+
+// 3. Comprehensive Indian Market Universe (55+ Instruments across all major NSE/BSE sectors)
 export const marketRows = [
-  // --- Benchmark Indices ---
-  { symbol: 'NIFTY 50', name: 'Nifty 50 Index', price: 24872.3, changePct: 0.64, category: 'Index', volume: '34.2M', rsi: 62 },
-  { symbol: 'BANK NIFTY', name: 'Bank Nifty Index', price: 52180.4, changePct: 0.92, category: 'Index', volume: '18.5M', rsi: 65 },
+  // --- Benchmark Indices (also exposed in stock scanner) ---
+  { symbol: 'NIFTY 50', name: 'Nifty 50 Index', price: 22563.10, changePct: -0.82, category: 'Index', volume: '34.2M', rsi: 43 },
+  { symbol: 'BANK NIFTY', name: 'Bank Nifty Index', price: 53781.85, changePct: -0.36, category: 'Index', volume: '18.5M', rsi: 48 },
   { symbol: 'SENSEX', name: 'BSE Sensex Index', price: 81450.2, changePct: 0.52, category: 'Index', volume: '12.1M', rsi: 59 },
-  { symbol: 'NIFTY IT', name: 'Nifty IT Index', price: 42180.8, changePct: 1.15, category: 'Index', volume: '8.4M', rsi: 68 },
+  { symbol: 'NIFTY IT', name: 'Nifty IT Index', price: 31107.65, changePct: -3.36, category: 'Index', volume: '8.4M', rsi: 29 },
   { symbol: 'INDIA VIX', name: 'Volatility Index', price: 13.42, changePct: -2.10, category: 'Index', volume: '4.8M', rsi: 38 },
 
   // --- Banking & Financials ---
@@ -85,4 +145,3 @@ export const marketRows = [
   { symbol: 'ADANIPORTS', name: 'Adani Ports & SEZ', price: 1385.00, changePct: 1.90, category: 'Conglomerate', volume: '3.6M', rsi: 68 },
   { symbol: 'BHARTIARTL', name: 'Bharti Airtel Limited', price: 1844.2, changePct: -0.18, category: 'Telecom', volume: '3.1M', rsi: 49 }
 ];
-

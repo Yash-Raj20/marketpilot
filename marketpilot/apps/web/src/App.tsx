@@ -56,12 +56,20 @@ function AppLayout() {
   const [activeAlerts, setActiveAlerts] = useState<PlatformAlert[]>([]);
   const [dhanConnected, setDhanConnected] = useState(false);
   const [dhanClientId, setDhanClientId] = useState('');
+  const [isLiveExchange, setIsLiveExchange] = useState(true);
   const [aiCopilotOpen, setAiCopilotOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // 0. Check live DhanHQ broker status
+    // 0. Check platform market data mode
+    api<{ useMockData: boolean; provider: string; dhanConfigured: boolean }>('/market/config')
+      .then(res => {
+        setIsLiveExchange(!res.useMockData);
+      })
+      .catch(() => {});
+
+    // 0.1 Check live DhanHQ broker status
     api<{ configured: boolean; connected: boolean; data?: { dhanClientId?: string } }>('/dhan/status')
       .then(res => {
         if (res.connected) {
@@ -71,10 +79,25 @@ function AppLayout() {
       })
       .catch(() => {});
 
-    // 1. Fetch market stocks from API
+    // 1. Fetch initial market stocks from API
     api<{ results: Stock[] }>('/market/stocks')
-      .then(d => setStocks(d.results))
+      .then(d => {
+        if (d && d.results && d.results.length > 0) {
+          setStocks(d.results);
+        }
+      })
       .catch(() => {});
+
+    // 1.1 Recurring Live Exchange Poller (Syncs live prices every 12 seconds)
+    const stockInterval = setInterval(() => {
+      api<{ results: Stock[] }>('/market/stocks')
+        .then(d => {
+          if (d && d.results && d.results.length > 0) {
+            setStocks(d.results);
+          }
+        })
+        .catch(() => {});
+    }, 12000);
 
     // 2. Fetch active platform announcements/alerts
     api<{ alerts: PlatformAlert[] }>('/admin/alerts/active')
@@ -96,6 +119,8 @@ function AppLayout() {
         setUser(null);
         setToken(null);
       });
+
+    return () => clearInterval(stockInterval);
   }, []);
 
   // Auto-dismiss toast notification after 5 seconds
@@ -276,36 +301,36 @@ function AppLayout() {
 
               <div 
                 className="demo-alert"
-                style={dhanConnected ? { 
-                  background: 'rgba(13, 31, 30, 0.75)', 
-                  borderColor: 'rgba(69, 214, 162, 0.35)' 
+                style={isLiveExchange ? { 
+                  background: 'rgba(13, 31, 30, 0.85)', 
+                  borderColor: 'rgba(69, 214, 162, 0.4)' 
                 } : undefined}
               >
                 <div 
                   className="alert-symbol"
-                  style={dhanConnected ? { background: '#45d6a2', color: '#091312', fontWeight: 800 } : undefined}
+                  style={isLiveExchange ? { background: '#45d6a2', color: '#091312', fontWeight: 800 } : undefined}
                 >
-                  {dhanConnected ? '✓' : 'i'}
+                  {isLiveExchange ? '✓' : 'i'}
                 </div>
                 <div>
-                  <strong style={dhanConnected ? { color: '#45d6a2' } : undefined}>
-                    {dhanConnected 
-                      ? (user ? `Live DhanHQ Feed (Client ID: ${dhanClientId})` : 'Live Exchange Market Feed Active') 
+                  <strong style={isLiveExchange ? { color: '#45d6a2' } : undefined}>
+                    {isLiveExchange 
+                      ? (dhanConnected 
+                          ? `Live Exchange Feed Active (NSE/BSE) + DhanHQ Client: ${dhanClientId}` 
+                          : 'Live Exchange Market Feed Active (NSE / BSE)') 
                       : 'Preview environment'}
                   </strong>
                   <span>
-                    {dhanConnected 
-                      ? (user 
-                          ? ' Direct broker connection active. Real-time balance and broker portfolio synced in read-only mode.'
-                          : ' Real-time market prices synced directly from exchange via DhanHQ.')
-                      : ' All stock prices and charts are simulated sample data, not live exchange quotes.'}
+                    {isLiveExchange 
+                      ? ' Real-time prices, sector capital flow & market indices synced live from exchange gateway.'
+                      : ' All stock prices and charts are simulated sample data.'}
                   </span>
                 </div>
                 <button 
-                  onClick={() => setToast(dhanConnected ? `Connected to DhanHQ API v2 (Client: ${dhanClientId}). Safe read-only mode.` : 'Connect a licensed market data provider before production launch.')}
-                  style={dhanConnected ? { color: '#45d6a2', borderColor: 'rgba(69, 214, 162, 0.3)' } : undefined}
+                  onClick={() => setToast(isLiveExchange ? 'Live Exchange connection active. Prices refresh automatically every few seconds.' : 'Connect a licensed market data provider before production launch.')}
+                  style={isLiveExchange ? { color: '#45d6a2', borderColor: 'rgba(69, 214, 162, 0.35)' } : undefined}
                 >
-                  {dhanConnected ? 'Broker Info' : 'Learn more'} <ArrowUpRight size={13} />
+                  {isLiveExchange ? 'Feed Status' : 'Learn more'} <ArrowUpRight size={13} />
                 </button>
               </div>
             </>

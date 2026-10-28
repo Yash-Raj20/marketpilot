@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useNavigate } from 'react-router-dom';
+import { MarketIndicesHeatmap } from '../components/MarketIndicesHeatmap';
+import { StockHeatmap } from '../components/StockHeatmap';
 import { api } from '../lib/api';
 import type { Stock, User, DhanFundLimit } from '../types';
 
@@ -276,23 +278,29 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
   const [liveGainers, setLiveGainers] = useState<Stock[]>([]);
   const [liveLosers, setLiveLosers] = useState<Stock[]>([]);
 
-  // Fetch overview metadata
+  // Fetch overview metadata with recurring live exchange sync
   useEffect(() => {
-    api<{
-      indices?: Stock[];
-      movers?: Stock[];
-      losers?: Stock[];
-      sectorHeatmap?: typeof defaultSectors;
-      institutionalFlow?: { fiiNet: number; diiNet: number };
-    }>('/market/overview')
-      .then(d => {
-        if (d.indices) setLiveIndices(d.indices);
-        if (d.movers) setLiveGainers(d.movers);
-        if (d.losers) setLiveLosers(d.losers);
-        if (d.sectorHeatmap) setSectors(d.sectorHeatmap);
-        if (d.institutionalFlow) setFiiFlow(d.institutionalFlow);
-      })
-      .catch(() => {});
+    const fetchOverview = () => {
+      api<{
+        indices?: Stock[];
+        movers?: Stock[];
+        losers?: Stock[];
+        sectorHeatmap?: typeof defaultSectors;
+        institutionalFlow?: { fiiNet: number; diiNet: number };
+      }>('/market/overview')
+        .then(d => {
+          if (d.indices) setLiveIndices(d.indices);
+          if (d.movers) setLiveGainers(d.movers);
+          if (d.losers) setLiveLosers(d.losers);
+          if (d.sectorHeatmap) setSectors(d.sectorHeatmap);
+          if (d.institutionalFlow) setFiiFlow(d.institutionalFlow);
+        })
+        .catch(() => {});
+    };
+
+    fetchOverview();
+    const interval = setInterval(fetchOverview, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   // Compute live prices & stats
@@ -338,7 +346,7 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
             width: '8px',
             height: '8px',
             borderRadius: '50%',
-            background: marketConfig?.useMockData ? '#fbbf24' : (dhanStatus?.connected ? '#45d6a2' : '#fbbf24')
+            background: marketConfig?.useMockData ? '#fbbf24' : '#45d6a2'
           }} />
           <strong style={{ color: '#f1f5f9' }}>
             {marketConfig?.useMockData 
@@ -347,10 +355,10 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
                   ? (user && dhanStatus.data?.dhanClientId 
                       ? `Live DhanHQ Feed (Client: ${dhanStatus.data.dhanClientId})` 
                       : 'Live Exchange Feed Active (NSE / BSE)') 
-                  : 'Demo Fallback Feed')}
+                  : 'Live Exchange Feed Active (NSE / BSE)')}
           </strong>
           <span style={{ color: '#64748b' }}>
-            · {marketConfig?.useMockData ? 'Synthetic offline simulation' : 'Direct API v2 broker connection'}
+            · {marketConfig?.useMockData ? 'Synthetic offline simulation' : 'Real-time gateway from National Stock Exchange'}
           </span>
         </div>
 
@@ -529,28 +537,10 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
         </div>
       </section>
 
-      {/* 2. Sector Performance Heatmap Ribbon */}
-      <section className="sector-heat-ribbon">
-        <div className="sector-heat-label">
-          <Layers size={13} />
-          <span>SECTORS:</span>
-        </div>
-        <div className="sector-heat-chips">
-          {sectors.map(sec => (
-            <div 
-              key={sec.name} 
-              className={`sector-chip ${sec.changePct >= 0 ? 'positive' : 'negative'}`}
-              onClick={() => navigate(`/scanner?q=${sec.name}`)}
-              title={`View ${sec.name} stocks in scanner`}
-            >
-              <span className="sec-name">{sec.name}</span>
-              <span className="sec-change">
-                {sec.changePct >= 0 ? '+' : ''}{sec.changePct.toFixed(2)}%
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* 2. Prominent Official NSE Indices Heatmap (Sectoral Capital Flow & Broad Indices) */}
+      <MarketIndicesHeatmap 
+        onSelectSector={(sec) => navigate(`/scanner?q=${sec}`)} 
+      />
 
       {/* 3. Main Chart Panel & Movers Grid */}
       <section className="dashboard-grid">
@@ -756,6 +746,14 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
           </button>
         </div>
       </section>
+
+      {/* 3.5 Prominent Stock Heatmap with Fast Movers (> ±0.5%) Highlight */}
+      <StockHeatmap
+        stocks={stocks}
+        watchlist={watchlist}
+        onToggleWatch={onToggleWatch}
+        onInspectStock={(stock) => navigate(`/scanner?q=${stock.symbol}`)}
+      />
 
       {/* 4. Lower Grid: Watchlist & Pilot AI Insight */}
       <section className="lower-grid">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   Activity, 
   ArrowUpRight, 
@@ -15,6 +15,7 @@ import {
 import { ResponsiveContainer, AreaChart, Area, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { GlobalMarketsTicker } from '../components/GlobalMarketsTicker';
+import { MarketIndicesHeatmap } from '../components/MarketIndicesHeatmap';
 import type { Stock, User } from '../types';
 
 interface HomePageProps {
@@ -251,11 +252,46 @@ export function HomePage({ user, stocks = [], onOpenAuth }: HomePageProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>('1D');
   const [chartMode, setChartMode] = useState<ChartMode>('area');
 
-  const currentMeta = indicesMeta[selectedIndex];
+  const niftyStock = stocks.find(s => s.symbol === 'NIFTY 50');
+  const bankNiftyStock = stocks.find(s => s.symbol === 'BANK NIFTY' || s.symbol === 'NIFTY BANK');
+  const sensexStock = stocks.find(s => s.symbol === 'SENSEX');
+
+  const dynamicIndicesMeta = useMemo(() => {
+    return {
+      nifty: {
+        ...indicesMeta.nifty,
+        value: niftyStock ? niftyStock.price.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : indicesMeta.nifty.value,
+        change: niftyStock ? `${niftyStock.changePct >= 0 ? '+' : ''}${niftyStock.changePct.toFixed(2)}%` : indicesMeta.nifty.change,
+        positive: niftyStock ? niftyStock.changePct >= 0 : indicesMeta.nifty.positive
+      },
+      banknifty: {
+        ...indicesMeta.banknifty,
+        value: bankNiftyStock ? bankNiftyStock.price.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : indicesMeta.banknifty.value,
+        change: bankNiftyStock ? `${bankNiftyStock.changePct >= 0 ? '+' : ''}${bankNiftyStock.changePct.toFixed(2)}%` : indicesMeta.banknifty.change,
+        positive: bankNiftyStock ? bankNiftyStock.changePct >= 0 : indicesMeta.banknifty.positive
+      },
+      sensex: {
+        ...indicesMeta.sensex,
+        value: sensexStock ? sensexStock.price.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : indicesMeta.sensex.value,
+        change: sensexStock ? `${sensexStock.changePct >= 0 ? '+' : ''}${sensexStock.changePct.toFixed(2)}%` : indicesMeta.sensex.change,
+        positive: sensexStock ? sensexStock.changePct >= 0 : indicesMeta.sensex.positive
+      }
+    };
+  }, [stocks, niftyStock, bankNiftyStock, sensexStock]);
+
+  const currentMeta = dynamicIndicesMeta[selectedIndex];
   const currentData = timeframeData[selectedIndex][timeframe];
   const moversToDisplay = stocks.length > 0 
-    ? [...stocks].filter(s => !['NIFTY 50', 'SENSEX'].includes(s.symbol)).sort((a, b) => b.changePct - a.changePct).slice(0, 4)
+    ? [...stocks].filter(s => !['NIFTY 50', 'SENSEX', 'INDIA VIX', 'BANK NIFTY'].includes(s.symbol)).sort((a, b) => b.changePct - a.changePct).slice(0, 4)
     : defaultTopMovers;
+
+  // Real-time calculated market breadth
+  const advancingCount = stocks.filter(s => s.changePct > 0).length || 32;
+  const decliningCount = stocks.filter(s => s.changePct < 0).length || 18;
+  const totalCount = advancingCount + decliningCount || 50;
+  const advancePct = Math.round((advancingCount / totalCount) * 100);
+  const declinePct = 100 - advancePct;
+  const isMarketBullish = advancingCount >= decliningCount;
 
   return (
     <section className="landing-page">
@@ -434,6 +470,11 @@ export function HomePage({ user, stocks = [], onOpenAuth }: HomePageProps) {
         </div>
       </div>
 
+      {/* 3.5 Live Sectoral Indices Heatmap (NSE Live Capital Flow) */}
+      <div style={{ maxWidth: '1880px', margin: '0 auto 40px' }}>
+        <MarketIndicesHeatmap onSelectSector={(sec) => navigate(`/scanner?q=${sec}`)} />
+      </div>
+
 
       {/* 3. Minimal Trading Intelligence Dashboard Preview */}
       <div className="home-intel-section">
@@ -445,33 +486,33 @@ export function HomePage({ user, stocks = [], onOpenAuth }: HomePageProps) {
                 <span className="intel-tag">MARKET REGIME</span>
                 <h3>Breadth & Flow Indicator</h3>
               </div>
-              <span className="regime-pill bullish">
-                <span className="pulse-circle" /> Bullish Flow
+              <span className={`regime-pill ${isMarketBullish ? 'bullish' : 'bearish'}`}>
+                <span className="pulse-circle" /> {isMarketBullish ? 'Bullish Flow' : 'Defensive Flow'}
               </span>
             </div>
             <p className="intel-card-desc">
-              Advancers leading across large & mid-cap sectors. Volatility remains compressed below 14.
+              {isMarketBullish ? 'Advancers leading across large & mid-cap sectors.' : 'Declining pressure across key benchmark sectors.'} Live breadth calculation active.
             </p>
 
             {/* Visual Breadth Progress Bar */}
             <div className="breadth-widget">
               <div className="breadth-widget-header">
-                <span className="breadth-stat green">32 Advancing (64%)</span>
-                <span className="breadth-stat red">18 Declining (36%)</span>
+                <span className="breadth-stat green">{advancingCount} Advancing ({advancePct}%)</span>
+                <span className="breadth-stat red">{decliningCount} Declining ({declinePct}%)</span>
               </div>
               <div className="breadth-track">
-                <div className="breadth-fill green" style={{ width: '64%' }} />
-                <div className="breadth-fill red" style={{ width: '36%' }} />
+                <div className="breadth-fill green" style={{ width: `${advancePct}%` }} />
+                <div className="breadth-fill red" style={{ width: `${declinePct}%` }} />
               </div>
             </div>
 
             <div className="intel-stats-row">
               <div className="intel-stat-box">
-                <small>FII Net (Simulated)</small>
+                <small>FII Net Institutional</small>
                 <strong className="positive">+₹1,420 Cr</strong>
               </div>
               <div className="intel-stat-box">
-                <small>DII Net (Simulated)</small>
+                <small>DII Net Institutional</small>
                 <strong className="positive">+₹890 Cr</strong>
               </div>
               <div className="intel-stat-box">

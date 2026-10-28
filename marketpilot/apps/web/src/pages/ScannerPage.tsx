@@ -18,10 +18,12 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { StockTable } from '../components/StockTable';
 import { CustomSelect } from '../components/CustomSelect';
 import { StockInspectorModal } from '../components/StockInspectorModal';
+import { MarketIndicesHeatmap } from '../components/MarketIndicesHeatmap';
+import { StockHeatmap } from '../components/StockHeatmap';
 import { api } from '../lib/api';
 import type { Stock } from '../types';
 
@@ -32,7 +34,8 @@ interface ScannerPageProps {
 }
 
 export type TimeHorizon = '24h' | '3d' | '1w' | '1m';
-type PresetFilter = 'all' | 'ai-picks' | 'gainers' | 'losers' | 'momentum' | 'breakout' | 'dip' | 'watchlist';
+type PresetFilter = 'all' | 'fast-movers' | 'ai-picks' | 'gainers' | 'losers' | 'momentum' | 'breakout' | 'dip' | 'watchlist';
+type ViewMode = 'table' | 'heatmap' | 'sectoral';
 type SortOption = 
   | 'all' 
   | 'ai-desc' 
@@ -71,6 +74,7 @@ function money(n: number) {
 
 export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPageProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Time Horizon & Filters state
@@ -79,37 +83,59 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
   const [activePreset, setActivePreset] = useState<PresetFilter>('all');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [sortBy, setSortBy] = useState<SortOption>('all');
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
+
+  // Sync query/sector/view from URL search params
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const qParam = params.get('q');
+    const sectorParam = params.get('sector');
+    const viewParam = params.get('view');
+    if (qParam) setQuery(qParam);
+    if (sectorParam) setSelectedSector(sectorParam);
+    if (viewParam && (viewParam === 'table' || viewParam === 'heatmap' || viewParam === 'sectoral')) {
+      setViewMode(viewParam);
+    }
+  }, [location.search]);
 
   // Live exchange state
   const [liveStocks, setLiveStocks] = useState<Stock[]>(stocks);
   const [dataMode, setDataMode] = useState<'LIVE_EXCHANGE' | 'DEMO' | 'FALLBACK'>('LIVE_EXCHANGE');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdatedTime, setLastUpdatedTime] = useState<string>('');
   const [inspectedChartPoints, setInspectedChartPoints] = useState<Array<{ t: string; v: number }>>([]);
 
-  // Sync prop stocks if liveStocks is empty or props update
+  // Sync prop stocks if liveStocks is empty or props update from parent live feed
   useEffect(() => {
-    if (stocks && stocks.length > 0 && liveStocks.length === 0) {
+    if (stocks && stocks.length > 0) {
       setLiveStocks(stocks);
+      setLastUpdatedTime(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     }
   }, [stocks]);
 
   const currentStocksList = liveStocks.length > 0 ? liveStocks : stocks;
 
-  const refreshStocks = () => {
-    setIsRefreshing(true);
+  const refreshStocks = (silent = false) => {
+    if (!silent) setIsRefreshing(true);
     api<{ dataMode?: string; results: Stock[] }>('/market/stocks')
       .then(d => {
         if (d && d.results && d.results.length > 0) {
           setLiveStocks(d.results);
           if (d.dataMode) setDataMode(d.dataMode as any);
+          setLastUpdatedTime(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
         }
       })
       .catch(() => {})
-      .finally(() => setIsRefreshing(false));
+      .finally(() => {
+        if (!silent) setIsRefreshing(false);
+      });
   };
 
   useEffect(() => {
-    refreshStocks();
+    // Only fetch if parent stocks have not loaded yet
+    if (!stocks || stocks.length === 0) {
+      refreshStocks(true);
+    }
   }, []);
 
   // One-click reset to display all instruments cleanly
@@ -233,6 +259,7 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
 
         // 3. Preset Filter (Evaluated against the selected time horizon)
         const ret = getStockReturn(s, timeHorizon);
+        if (activePreset === 'fast-movers') return Math.abs(ret) >= 0.5;
         if (activePreset === 'ai-picks') return (s.aiScore ?? 0) >= 75 || ((s.rsi || 50) >= 60 && ret > 1.0);
         if (activePreset === 'gainers') return ret > 0;
         if (activePreset === 'losers') return ret < 0;
@@ -269,11 +296,12 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
     const total = currentStocksList.length;
     const bullish = currentStocksList.filter(s => getStockReturn(s, timeHorizon) > 0).length;
     const bearish = currentStocksList.filter(s => getStockReturn(s, timeHorizon) < 0).length;
+    const fastMoversCount = currentStocksList.filter(s => Math.abs(getStockReturn(s, timeHorizon)) >= 0.5).length;
     const aiTopCount = currentStocksList.filter(s => (s.aiScore ?? 0) >= 75 || ((s.rsi || 50) >= 60 && getStockReturn(s, timeHorizon) > 1.0)).length;
     const breakoutCount = currentStocksList.filter(s => (s.rsi || 50) >= 65 || getStockReturn(s, timeHorizon) >= 1.5).length;
     const dipCount = currentStocksList.filter(s => getStockReturn(s, timeHorizon) < 0 && ((s.rsi || 50) <= 45 || getStockReturn(s, timeHorizon) <= -1.0)).length;
     const topGainer = [...currentStocksList].sort((a, b) => getStockReturn(b, timeHorizon) - getStockReturn(a, timeHorizon))[0];
-    return { total, bullish, bearish, aiTopCount, breakoutCount, dipCount, topGainer };
+    return { total, bullish, bearish, fastMoversCount, aiTopCount, breakoutCount, dipCount, topGainer };
   }, [currentStocksList, timeHorizon]);
 
   const isFiltered = activePreset !== 'all' || selectedSector !== 'ALL' || query.trim() !== '' || sortBy !== 'all' || timeHorizon !== '24h';
@@ -297,7 +325,7 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
             )}
             <button
               type="button"
-              onClick={refreshStocks}
+              onClick={() => refreshStocks(false)}
               disabled={isRefreshing}
               style={{
                 background: 'rgba(56, 189, 248, 0.1)',
@@ -317,6 +345,36 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
               <RefreshCw size={11} className={isRefreshing ? 'spin' : ''} />
               {isRefreshing ? 'Syncing...' : 'Sync Live Quotes'}
             </button>
+            {lastUpdatedTime && (
+              <span style={{ fontSize: '11px', color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
+                • Auto-syncing (Last: {lastUpdatedTime})
+              </span>
+            )}
+
+            {/* View Mode Switcher: Table | Heatmap | NSE Sectoral Flow */}
+            <div className="scanner-view-toggle">
+              <button
+                type="button"
+                className={`view-mode-pill ${viewMode === 'table' ? 'active' : ''}`}
+                onClick={() => setViewMode('table')}
+              >
+                📋 Screener Table
+              </button>
+              <button
+                type="button"
+                className={`view-mode-pill ${viewMode === 'heatmap' ? 'active' : ''}`}
+                onClick={() => setViewMode('heatmap')}
+              >
+                🔲 Equities Heatmap
+              </button>
+              <button
+                type="button"
+                className={`view-mode-pill ${viewMode === 'sectoral' ? 'active' : ''}`}
+                onClick={() => setViewMode('sectoral')}
+              >
+                🏛️ NSE Sectoral Flow
+              </button>
+            </div>
           </div>
           <p className="panel-description">
             Algorithmic scanners and technical screens across NSE/BSE equities and benchmarks.
@@ -404,6 +462,17 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
           title="Show all instruments and reset all filters"
         >
           All Instruments ({currentStocksList.length})
+        </button>
+        <button
+          type="button"
+          className={`preset-chip highlight-chip ${activePreset === 'fast-movers' ? 'active' : ''}`}
+          onClick={() => {
+            setActivePreset('fast-movers');
+            setSortBy(`change-${timeHorizon}-desc` as any);
+          }}
+          title="Show active stocks moving > 0.5% (Fast Movers)"
+        >
+          <Zap size={13} /> ⚡ Fast Movers &gt; ±0.5% ({metrics.fastMoversCount})
         </button>
         <button
           type="button"
@@ -544,15 +613,31 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
         </div>
       </div>
 
-      {/* 4. Enhanced Stock Table with Multi-Timeframe Horizon Prop */}
-      <StockTable
-        stocks={filteredStocks}
-        watchlist={watchlist}
-        timeHorizon={timeHorizon}
-        onToggle={onToggleWatch}
-        onInspect={(stock) => setInspectedStock(stock)}
-        onTradeInRiskStudio={(stock) => navigate(`/risk-studio?symbol=${stock.symbol}&price=${stock.price}`)}
-      />
+      {/* 4. Display Content based on active View Mode */}
+      {viewMode === 'sectoral' ? (
+        <MarketIndicesHeatmap 
+          onSelectSector={(sector) => {
+            setSelectedSector(sector);
+            setViewMode('table');
+          }} 
+        />
+      ) : viewMode === 'heatmap' ? (
+        <StockHeatmap
+          stocks={filteredStocks}
+          watchlist={watchlist}
+          onToggleWatch={onToggleWatch}
+          onInspectStock={(stock) => setInspectedStock(stock)}
+        />
+      ) : (
+        <StockTable
+          stocks={filteredStocks}
+          watchlist={watchlist}
+          timeHorizon={timeHorizon}
+          onToggle={onToggleWatch}
+          onInspect={(stock) => setInspectedStock(stock)}
+          onTradeInRiskStudio={(stock) => navigate(`/risk-studio?symbol=${stock.symbol}&price=${stock.price}`)}
+        />
+      )}
 
       {/* 5. Deep-Dive Stock Inspector Modal with Complete Details */}
       <StockInspectorModal

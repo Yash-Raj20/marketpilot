@@ -115,9 +115,9 @@ export function StockTable({
   const visibleStocks = stocks.slice(startIndex, endIndex);
 
   const horizonTitle = 
-    timeHorizon === '3d' ? '3D CHANGE' : 
-    timeHorizon === '1w' ? '1W CHANGE' : 
-    timeHorizon === '1m' ? '1M CHANGE' : '24H CHANGE';
+    timeHorizon === '3d' ? '3D RETURN' : 
+    timeHorizon === '1w' ? '1W RETURN' : 
+    timeHorizon === '1m' ? '1M RETURN' : '24H RETURN';
 
   const horizonTrendTitle = 
     timeHorizon === '3d' ? '3D TREND' : 
@@ -126,17 +126,26 @@ export function StockTable({
 
   return (
     <div className="table-wrapper-container">
+      {/* Quick Beginner Guide Pill */}
+      <div className="table-quick-guide">
+        <span className="guide-dot" />
+        <span>
+          <strong>Live Market Table:</strong> Stocks moving &gt; <strong>0.5%</strong> are tagged with <span className="guide-tag">⚡ Active</span>. 
+          RSI above 60 indicates bullish momentum; below 35 indicates oversold dip. Click any stock to inspect full live charts.
+        </span>
+      </div>
+
       <div className="table-scroll">
         <table className="scanner-table">
           <thead>
             <tr>
               <th>INSTRUMENT</th>
               <th>SECTOR</th>
-              <th>PRICE</th>
+              <th>LIVE PRICE</th>
               <th>{horizonTitle}</th>
               <th>AI SCORE & SETUP</th>
               <th>INTRADAY RANGE</th>
-              <th>RSI & SIGNAL</th>
+              <th>RSI & MOMENTUM</th>
               <th>VOLUME</th>
               <th>{horizonTrendTitle}</th>
               <th>ACTIONS</th>
@@ -154,8 +163,9 @@ export function StockTable({
                 s.changePct;
 
               const isPositive = stockChange >= 0;
+              const isFastMover = Math.abs(stockChange) >= 0.5;
               const rsiVal = s.rsi || (isPositive ? 58 + Math.round(s.changePct * 4) : 46 - Math.round(Math.abs(s.changePct) * 4));
-              const signalText = rsiVal >= 70 ? 'Overbought' : rsiVal >= 60 ? 'Strong Bull' : rsiVal <= 35 ? 'Oversold' : 'Neutral';
+              const signalText = rsiVal >= 70 ? 'Overbought' : rsiVal >= 60 ? 'Strong Bull' : rsiVal <= 35 ? 'Oversold Dip' : 'Consolidation';
               const signalClass = rsiVal >= 60 ? 'bull-signal' : rsiVal <= 35 ? 'bear-signal' : 'neutral-signal';
               
               // Intraday range percentage position
@@ -185,7 +195,10 @@ export function StockTable({
               const aiReasonText = s.aiReason ?? `${horizonLabel} Return: ${stockChange >= 0 ? '+' : ''}${stockChange.toFixed(2)}% | RSI: ${rsiVal} | Score: ${score}/100`;
 
               return (
-                <tr key={s.symbol} className="scanner-table-row">
+                <tr 
+                  key={s.symbol} 
+                  className={`scanner-table-row ${isPositive ? 'row-gainer' : 'row-loser'} ${isFastMover ? 'row-fast-mover' : ''}`}
+                >
                   {/* 1. Instrument Monogram & Name */}
                   <td>
                     <div 
@@ -198,6 +211,7 @@ export function StockTable({
                         <div className="stock-title-row">
                           <strong>{s.symbol}</strong>
                           {s.category === 'Index' && <span className="index-pill">INDEX</span>}
+                          {isFastMover && <span className="table-row-dot" title="Active Fast Mover" />}
                         </div>
                         <small>{s.name}</small>
                       </div>
@@ -214,12 +228,19 @@ export function StockTable({
                     <strong className="stock-price-text">₹{money(s.price)}</strong>
                   </td>
 
-                  {/* 4. Horizon Change */}
+                  {/* 4. Horizon Change + Fast Mover Tag */}
                   <td>
-                    <span className={`scanner-change-pill ${isPositive ? 'positive' : 'negative'}`}>
-                      {isPositive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
-                      {isPositive ? '+' : ''}{stockChange.toFixed(2)}%
-                    </span>
+                    <div className="table-change-cell">
+                      <span className={`scanner-change-pill ${isPositive ? 'positive' : 'negative'}`}>
+                        {isPositive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                        {isPositive ? '+' : ''}{stockChange.toFixed(2)}%
+                      </span>
+                      {isFastMover && (
+                        <span className={`table-fast-mover-chip ${isPositive ? 'positive' : 'negative'}`}>
+                          ⚡ Active
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   {/* 5. AI Score & Setup Badge */}
@@ -267,7 +288,7 @@ export function StockTable({
                     <MiniSparkline changePct={stockChange} symbol={s.symbol} />
                   </td>
 
-                  {/* 9. Actions */}
+                  {/* 10. Actions */}
                   <td>
                     <div className="scanner-actions-cell">
                       <button
@@ -283,9 +304,9 @@ export function StockTable({
                         <button
                           className="table-action-icon-btn"
                           onClick={() => onInspect(s)}
-                          title={`Inspect ${s.symbol} interactive chart`}
+                          title={`Inspect ${s.symbol} Live Candlestick Chart`}
                         >
-                          <Eye size={15} />
+                          <Eye size={14} />
                         </button>
                       )}
 
@@ -295,7 +316,7 @@ export function StockTable({
                           onClick={() => onTradeInRiskStudio(s)}
                           title={`Calculate Risk & Position Size for ${s.symbol}`}
                         >
-                          <ShieldCheck size={15} />
+                          <ShieldCheck size={14} />
                         </button>
                       )}
                     </div>

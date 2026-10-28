@@ -48,9 +48,29 @@ app.use(cors({
 
 app.use(cookieParser());
 app.use(express.json({ limit: '100kb' }));
-const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many requests, please try again later.' } });
+
+// Dedicated high-capacity rate limiter for real-time market data polling (NSE/BSE tickers, indices, heatmaps)
+const marketLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10000, // Generous limit (10,000 requests / 15 min) for active multi-component live market polling
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Market data rate limit reached, please retry shortly.' }
+});
+
+// General API limiter for auth/mutations - skips read-heavy market data polling
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 2000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.originalUrl?.startsWith('/api/market') || req.baseUrl === '/api/market',
+  message: { error: 'Too many requests, please try again later.' }
+});
+
+app.use('/api/market', marketLimiter);
 app.use('/api', apiLimiter);
-app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false }));
+app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 120, standardHeaders: true, legacyHeaders: false }));
 app.get('/api/health', async (_req, res) => {
   try { await prisma.$queryRaw`SELECT 1`; res.json({ status: 'ok', database: 'connected', service: 'marketpilot-api' }); }
   catch { res.status(503).json({ status: 'degraded', database: 'unavailable' }); }

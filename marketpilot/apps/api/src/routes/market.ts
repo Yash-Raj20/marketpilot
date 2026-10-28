@@ -1,11 +1,12 @@
 import { Router } from 'express';
-import { marketRows } from '../services/market.js';
+import { marketRows, sectoralIndices, broadIndices } from '../services/market.js';
 import { isDhanConfigured } from '../services/dhan.js';
 import { 
   fetchAllLiveMarketRows, 
   fetchLiveQuote, 
   fetchLiveChartPoints, 
   fetchGlobalMarketTickers,
+  fetchLiveIndices,
   type MarketItem,
   type ChartPoint,
   type GlobalTickerItem
@@ -23,6 +24,41 @@ router.get('/global-tickers', async (_req, res) => {
     res.json({ tickers, asOf: new Date().toISOString() });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/**
+ * GET /api/market/indices
+ * Returns live or fixture Sectoral and Broad Market indices (Mirroring NSE Heatmap)
+ */
+router.get('/indices', async (_req, res) => {
+  const isMock = process.env.USE_MOCK_DATA === 'true';
+
+  if (isMock) {
+    return res.json({
+      dataMode: 'DEMO',
+      asOf: new Date().toISOString(),
+      sectoral: sectoralIndices,
+      broad: broadIndices
+    });
+  }
+
+  try {
+    const { sectoral, broad } = await fetchLiveIndices();
+    res.json({
+      dataMode: 'LIVE_EXCHANGE',
+      asOf: new Date().toISOString(),
+      sectoral,
+      broad
+    });
+  } catch (err) {
+    console.error('[MarketRoute] fetchLiveIndices failed, returning fixtures:', err);
+    res.json({
+      dataMode: 'FALLBACK',
+      asOf: new Date().toISOString(),
+      sectoral: sectoralIndices,
+      broad: broadIndices
+    });
   }
 });
 
@@ -80,13 +116,18 @@ router.get('/overview', async (_req, res) => {
         { name: 'Healthcare', changePct: 0.24, count: 7 },
         { name: 'IT', changePct: -0.38, count: 10 },
         { name: 'Auto', changePct: -0.65, count: 8 }
-      ]
+      ],
+      sectoralIndices,
+      broadIndices
     });
   }
 
   // 2. Real Live Exchange Feed
   try {
-    const liveRows = await fetchAllLiveMarketRows();
+    const [liveRows, liveIndices] = await Promise.all([
+      fetchAllLiveMarketRows(),
+      fetchLiveIndices().catch(() => ({ sectoral: sectoralIndices, broad: broadIndices }))
+    ]);
     const indices = liveRows.filter(x => x.category === 'Index');
     const nonIndices = liveRows.filter(x => x.category !== 'Index');
 
@@ -145,7 +186,9 @@ router.get('/overview', async (_req, res) => {
         { name: 'IT', changePct: -0.25, count: 3 },
         { name: 'Energy', changePct: 0.76, count: 2 },
         { name: 'Auto', changePct: -0.65, count: 1 }
-      ]
+      ],
+      sectoralIndices: liveIndices.sectoral,
+      broadIndices: liveIndices.broad
     });
   } catch (err) {
     console.error('[MarketRoute] Live overview failed, fallback to fixtures:', err);
@@ -155,7 +198,9 @@ router.get('/overview', async (_req, res) => {
       message: 'Fallback snapshot active.',
       indices: marketRows.filter(x => x.category === 'Index'),
       movers: marketRows.filter(x => x.category !== 'Index').slice(0, 5),
-      losers: marketRows.filter(x => x.category !== 'Index').slice(-5)
+      losers: marketRows.filter(x => x.category !== 'Index').slice(-5),
+      sectoralIndices,
+      broadIndices
     });
   }
 });

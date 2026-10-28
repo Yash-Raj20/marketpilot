@@ -1,4 +1,4 @@
-import { marketRows } from './market.js';
+import { marketRows, sectoralIndices, broadIndices } from './market.js';
 
 export interface MarketItem {
   symbol: string;
@@ -27,13 +27,51 @@ export interface ChartPoint {
   volume: number;
 }
 
-// Live Exchange Ticker Mapping for Indian Markets (55+ Instruments)
+// Live Exchange Ticker Mapping for Indian Markets (Sectoral, Broad & Equity Universe)
 const TICKER_MAP: Record<string, string> = {
-  // Indices
-  'NIFTY 50': '^NSEI',
+  // --- NSE Sectoral Indices (Mirroring NSE Heatmap) ---
+  'NIFTY AUTO': '^CNXAUTO',
+  'NIFTY BANK': '^NSEBANK',
   'BANK NIFTY': '^NSEBANK',
-  'SENSEX': '^BSESN',
+  'NIFTY FIN SERVICE': '^CNXFIN',
+  'NIFTY FMCG': '^CNXFMCG',
   'NIFTY IT': '^CNXIT',
+  'NIFTY MEDIA': '^CNXMEDIA',
+  'NIFTY METAL': '^CNXMETAL',
+  'NIFTY PHARMA': '^CNXPHARMA',
+  'NIFTY PSU BANK': '^CNXPSUBANK',
+  'NIFTY REALTY': '^CNXREALTY',
+  'NIFTY PVT BANK': 'NIFTY_PVT_BANK.NS',
+  'NIFTY HEALTHCARE': 'NIFTY_HEALTHCARE.NS',
+  'NIFTY CONSR DUR': 'NIFTY_CONSR_DUR.NS',
+  'NIFTY OIL AND GAS': '^CNXENERGY',
+  'NIFTY CHEMICALS': 'NIFTY_CHEMICALS.NS',
+  'NIFTY500 HEALTHCARE': 'NIFTY500_HEALTHCARE.NS',
+  'NIFTY MIDSMALL HEALTHCARE': 'NIFTY_MIDSMALL_HEALTHCARE.NS',
+  'NIFTY INFRA': '^CNXINFRA',
+
+  // --- NSE Broad Market Indices ---
+  'NIFTY 50': '^NSEI',
+  'NIFTY NEXT 50': '^NSMIDCP',
+  'NIFTY MIDCAP 50': '^NSEMDCP50',
+  'NIFTY MIDCAP 100': '^NSEMDCP100',
+  'NIFTY MIDCAP 150': '^NSEMDCP150',
+  'NIFTY SMLCAP 50': '^CNXSC',
+  'NIFTY SMLCAP 100': '^CNXSC',
+  'NIFTY SMLCAP 250': '^CNXSC250',
+  'NIFTY MIDSMAL 400': 'NIFTY_MIDSMAL_400.NS',
+  'NIFTY 100': '^CNX100',
+  'NIFTY 200': '^CNX200',
+  'NIFTY 500': '^CRSLDX',
+  'NIFTY500 MULTICAP': 'NIFTY500_MULTICAP.NS',
+  'NIFTY LARGEMID 250': 'NIFTY_LARGEMID_250.NS',
+  'NIFTY MID SELECT': 'NIFTY_MID_SELECT.NS',
+  'NIFTY TOTAL MARKET': 'NIFTY_TOTAL_MARKET.NS',
+  'NIFTY MICROCAP 250': 'NIFTY_MICROCAP_250.NS',
+  'NIFTY FPI 150': 'NIFTY_FPI_150.NS',
+  'NIFTY500 LMS EQUAL': 'NIFTY500_LMS_EQUAL.NS',
+  'NIFTY SMALLCAP 50': '^CNXSC',
+  'SENSEX': '^BSESN',
   'INDIA VIX': '^INDIAVIX',
 
   // Banking
@@ -185,10 +223,13 @@ const CHART_CACHE_TTL_MS = 30 * 1000; // 30 seconds
 export async function fetchLiveQuote(symbol: string): Promise<MarketItem | null> {
   const sym = symbol.toUpperCase().trim();
   const ticker = TICKER_MAP[sym];
-  const fallback = marketRows.find(x => x.symbol.toUpperCase() === sym);
+  const fallback = 
+    marketRows.find(x => x.symbol.toUpperCase() === sym) ||
+    sectoralIndices.find(x => x.symbol.toUpperCase() === sym) ||
+    broadIndices.find(x => x.symbol.toUpperCase() === sym);
 
   if (!ticker) {
-    return fallback ? { ...fallback } : null;
+    return fallback ? { ...fallback, category: fallback.category || 'Equity', volume: fallback.volume || '1.0M', rsi: fallback.rsi || 50 } : null;
   }
 
   const cached = quotesCache.get(sym);
@@ -261,10 +302,13 @@ export async function fetchLiveQuote(symbol: string): Promise<MarketItem | null>
       const fallbackAi = computeAiScore({
         price: fallback.price,
         changePct: fallback.changePct,
-        rsi: fallback.rsi
+        rsi: fallback.rsi || 50
       });
       return {
         ...fallback,
+        category: fallback.category || 'Equity',
+        volume: fallback.volume || '1.0M',
+        rsi: fallback.rsi || 50,
         aiScore: fallbackAi.aiScore,
         aiSignal: fallbackAi.aiSignal,
         aiReason: fallbackAi.aiReason
@@ -272,6 +316,49 @@ export async function fetchLiveQuote(symbol: string): Promise<MarketItem | null>
     }
     return null;
   }
+}
+
+/**
+ * Fetch all Sectoral and Broad Market Indices with live quotes
+ */
+export async function fetchLiveIndices(): Promise<{
+  sectoral: MarketItem[];
+  broad: MarketItem[];
+}> {
+  const [sectoral, broad] = await Promise.all([
+    Promise.all(
+      sectoralIndices.map(async idx => {
+        const live = await fetchLiveQuote(idx.symbol);
+        if (live) return live;
+        return {
+          symbol: idx.symbol,
+          name: idx.name,
+          price: idx.price,
+          changePct: idx.changePct,
+          category: 'Sectoral',
+          volume: idx.volume || '1.4M',
+          rsi: idx.rsi || 50
+        };
+      })
+    ),
+    Promise.all(
+      broadIndices.map(async idx => {
+        const live = await fetchLiveQuote(idx.symbol);
+        if (live) return live;
+        return {
+          symbol: idx.symbol,
+          name: idx.name,
+          price: idx.price,
+          changePct: idx.changePct,
+          category: 'Broad',
+          volume: idx.volume || '18.2M',
+          rsi: idx.rsi || 50
+        };
+      })
+    )
+  ]);
+
+  return { sectoral, broad };
 }
 
 /**
