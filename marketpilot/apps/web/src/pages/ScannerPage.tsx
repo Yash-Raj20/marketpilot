@@ -15,7 +15,11 @@ import {
   ArrowUpRight,
   ChevronDown,
   RefreshCw,
-  RotateCcw
+  RotateCcw,
+  Clock,
+  Layers,
+  Grid,
+  BarChart3
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -101,6 +105,8 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
   // Live exchange state
   const [liveStocks, setLiveStocks] = useState<Stock[]>(stocks);
   const [dataMode, setDataMode] = useState<'LIVE_EXCHANGE' | 'DEMO' | 'FALLBACK'>('LIVE_EXCHANGE');
+  const [marketStatus, setMarketStatus] = useState<string>('Live Exchange (Market Open)');
+  const [sourceBadge, setSourceBadge] = useState<string>('Live (NSE)');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string>('');
   const [inspectedChartPoints, setInspectedChartPoints] = useState<Array<{ t: string; v: number }>>([]);
@@ -117,12 +123,14 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
 
   const refreshStocks = (silent = false) => {
     if (!silent) setIsRefreshing(true);
-    api<{ dataMode?: string; results: Stock[] }>('/market/stocks')
+    api<{ dataMode?: string; results: Stock[]; marketStatus?: { isOpen: boolean; statusText: string; timeIST: string }; sourceBadge?: string }>('/market/stocks')
       .then(d => {
         if (d && d.results && d.results.length > 0) {
           setLiveStocks(d.results);
           if (d.dataMode) setDataMode(d.dataMode as any);
-          setLastUpdatedTime(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+          if (d.marketStatus?.statusText) setMarketStatus(d.marketStatus.statusText);
+          if (d.sourceBadge) setSourceBadge(d.sourceBadge);
+          setLastUpdatedTime(d.marketStatus?.timeIST || new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
         }
       })
       .catch(() => {})
@@ -136,6 +144,12 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
     if (!stocks || stocks.length === 0) {
       refreshStocks(true);
     }
+
+    // Auto-refresh every 35 seconds during market sessions (Requirement 5)
+    const refreshTimer = setInterval(() => {
+      refreshStocks(true);
+    }, 35000);
+    return () => clearInterval(refreshTimer);
   }, []);
 
   // One-click reset to display all instruments cleanly
@@ -306,238 +320,275 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
 
   const isFiltered = activePreset !== 'all' || selectedSector !== 'ALL' || query.trim() !== '' || sortBy !== 'all' || timeHorizon !== '24h';
 
+  const niftyStock = currentStocksList.find(s => s.symbol === 'NIFTY 50');
+  const bankNiftyStock = currentStocksList.find(s => s.symbol === 'BANK NIFTY' || s.symbol === 'NIFTY BANK');
+  const sensexStock = currentStocksList.find(s => s.symbol === 'SENSEX');
+
   return (
     <section className="panel page-panel scanner-wrapper-panel">
-      {/* 1. Header with Title & Live Status */}
-      <div className="panel-heading scanner-header-row">
-        <div>
-          <div className="section-kicker">DISCOVERY WORKSPACE</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <h2 style={{ margin: 0 }}>Market Scanner</h2>
-            {dataMode === 'LIVE_EXCHANGE' ? (
-              <span className="live-tag live" style={{ background: 'rgba(69, 214, 162, 0.15)', color: '#45d6a2', border: '1px solid rgba(69, 214, 162, 0.3)' }}>
-                <span style={{ background: '#45d6a2' }} /> LIVE EXCHANGE FEED (NSE/BSE)
-              </span>
-            ) : (
-              <span className="live-tag demo">
-                <span /> SIMULATED DEMO
+      {/* 0. Top Benchmark & Market Regime Summary Bar (Requirement 7) */}
+      <div className="scanner-top-summary-bar">
+        <div className="summary-indices-strip">
+          {/* NIFTY 50 */}
+          <div className="summary-index-item" onClick={() => navigate('/scanner?q=NIFTY%2050')}>
+            <span className="index-label">NIFTY 50</span>
+            <strong className="index-val">₹{money(niftyStock?.price || 22563.10)}</strong>
+            <span className={`index-change ${(niftyStock?.changePct || 0) >= 0 ? 'positive' : 'negative'}`}>
+              {(niftyStock?.changePct || 0) >= 0 ? '▲ +' : '▼ '}{Math.abs(niftyStock?.changePct || 0.82).toFixed(2)}%
+            </span>
+          </div>
+
+          {/* BANK NIFTY */}
+          <div className="summary-index-item" onClick={() => navigate('/scanner?q=BANK%20NIFTY')}>
+            <span className="index-label">BANK NIFTY</span>
+            <strong className="index-val">₹{money(bankNiftyStock?.price || 53781.85)}</strong>
+            <span className={`index-change ${(bankNiftyStock?.changePct || 0) >= 0 ? 'positive' : 'negative'}`}>
+              {(bankNiftyStock?.changePct || 0) >= 0 ? '▲ +' : '▼ '}{Math.abs(bankNiftyStock?.changePct || 0.36).toFixed(2)}%
+            </span>
+          </div>
+
+          {/* SENSEX */}
+          <div className="summary-index-item" onClick={() => navigate('/scanner?q=SENSEX')}>
+            <span className="index-label">SENSEX</span>
+            <strong className="index-val">₹{money(sensexStock?.price || 81450.20)}</strong>
+            <span className={`index-change ${(sensexStock?.changePct || 0) >= 0 ? 'positive' : 'negative'}`}>
+              {(sensexStock?.changePct || 0) >= 0 ? '▲ +' : '▼ '}{Math.abs(sensexStock?.changePct || 0.52).toFixed(2)}%
+            </span>
+          </div>
+        </div>
+
+        {/* Advancing vs Declining Progress Bar */}
+        <div className="summary-breadth-box">
+          <div className="breadth-counts-row">
+            <span className="breadth-green">▲ {metrics.bullish} Advancing ({Math.round((metrics.bullish / (metrics.total || 1)) * 100)}%)</span>
+            <span className="breadth-red">▼ {metrics.bearish} Declining ({Math.round((metrics.bearish / (metrics.total || 1)) * 100)}%)</span>
+          </div>
+          <div className="breadth-track-bar">
+            <div 
+              className="breadth-fill green" 
+              style={{ width: `${Math.round((metrics.bullish / (metrics.total || 1)) * 100)}%` }} 
+            />
+            <div 
+              className="breadth-fill red" 
+              style={{ width: `${Math.round((metrics.bearish / (metrics.total || 1)) * 100)}%` }} 
+            />
+          </div>
+        </div>
+
+        {/* Feed & Market Session Indicator */}
+        <div className="summary-status-strip">
+          <span className={`summary-source-pill ${sourceBadge.includes('NSE') ? 'nse' : 'yf'}`}>
+            <span className="pulse-dot" /> {sourceBadge}
+          </span>
+          <span className="summary-market-status">
+            <Clock size={12} /> {marketStatus}
+          </span>
+        </div>
+      </div>
+
+      {/* 1. Clean Header with Title, View Modes & Quick Actions */}
+      <div className="scanner-clean-header">
+        <div className="scanner-clean-header-left">
+          <div className="scanner-clean-title-group">
+            <h2>Market Scanner</h2>
+            <span className="scanner-clean-live-pill">
+              <span className="live-dot" /> LIVE NSE
+            </span>
+            {lastUpdatedTime && (
+              <span className="scanner-clean-time">
+                • {lastUpdatedTime}
               </span>
             )}
+          </div>
+
+          {/* Segmented View Switcher */}
+          <div className="scanner-clean-view-toggle">
             <button
               type="button"
-              onClick={() => refreshStocks(false)}
-              disabled={isRefreshing}
-              style={{
-                background: 'rgba(56, 189, 248, 0.1)',
-                border: '1px solid rgba(56, 189, 248, 0.3)',
-                color: '#38bdf8',
-                borderRadius: '6px',
-                padding: '4px 10px',
-                fontSize: '11px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-              title="Fetch latest live exchange quotes"
+              className={`clean-view-btn ${viewMode === 'table' ? 'active' : ''}`}
+              onClick={() => setViewMode('table')}
+              title="Screener Table View"
             >
-              <RefreshCw size={11} className={isRefreshing ? 'spin' : ''} />
-              {isRefreshing ? 'Syncing...' : 'Sync Live Quotes'}
+              <Layers size={13} />
+              <span>Table</span>
             </button>
-            {lastUpdatedTime && (
-              <span style={{ fontSize: '11px', color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
-                • Auto-syncing (Last: {lastUpdatedTime})
-              </span>
-            )}
-
-            {/* View Mode Switcher: Table | Heatmap | NSE Sectoral Flow */}
-            <div className="scanner-view-toggle">
-              <button
-                type="button"
-                className={`view-mode-pill ${viewMode === 'table' ? 'active' : ''}`}
-                onClick={() => setViewMode('table')}
-              >
-                📋 Screener Table
-              </button>
-              <button
-                type="button"
-                className={`view-mode-pill ${viewMode === 'heatmap' ? 'active' : ''}`}
-                onClick={() => setViewMode('heatmap')}
-              >
-                🔲 Equities Heatmap
-              </button>
-              <button
-                type="button"
-                className={`view-mode-pill ${viewMode === 'sectoral' ? 'active' : ''}`}
-                onClick={() => setViewMode('sectoral')}
-              >
-                🏛️ NSE Sectoral Flow
-              </button>
-            </div>
-          </div>
-          <p className="panel-description">
-            Algorithmic scanners and technical screens across NSE/BSE equities and benchmarks.
-          </p>
-        </div>
-
-        {/* Quick Market Pulse Strip */}
-        <div className="scanner-metrics-strip">
-          <div className="scanner-metric-pill">
-            <span className="pill-muted">Scanned:</span>
-            <strong>{metrics.total} Assets</strong>
-          </div>
-          <div className="scanner-metric-pill green">
-            <TrendingUp size={13} />
-            <span>{metrics.bullish} {horizonTag} Gainers</span>
-          </div>
-          <div className="scanner-metric-pill red">
-            <TrendingDown size={13} />
-            <span>{metrics.bearish} {horizonTag} Losers</span>
-          </div>
-          {metrics.topGainer && (
-            <div 
-              className="scanner-metric-pill highlight"
-              onClick={() => setInspectedStock(metrics.topGainer)}
-              title="Click to inspect top gainer"
-              style={{ cursor: 'pointer' }}
+            <button
+              type="button"
+              className={`clean-view-btn ${viewMode === 'heatmap' ? 'active' : ''}`}
+              onClick={() => setViewMode('heatmap')}
+              title="Equities Heatmap View"
             >
-              <Flame size={13} className="flame-icon" />
-              <span>Top {horizonTag}: <strong>{metrics.topGainer.symbol}</strong> ({getStockReturn(metrics.topGainer, timeHorizon) >= 0 ? '+' : ''}{getStockReturn(metrics.topGainer, timeHorizon).toFixed(2)}%)</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 1.5 Multi-Timeframe Window Selector & AI Command Bar */}
-      <div className="scanner-horizon-bar">
-        <div className="horizon-selector-group">
-          <span className="horizon-group-label">
-            <SlidersHorizontal size={13} />
-            <span>Time Window:</span>
-          </span>
-          <div className="horizon-pills">
-            {([
-              { key: '24h', label: '24 Hours' },
-              { key: '3d', label: '3 Days' },
-              { key: '1w', label: '1 Week' },
-              { key: '1m', label: '1 Month' },
-            ] as const).map(tab => (
-              <button
-                key={tab.key}
-                type="button"
-                className={`horizon-pill ${timeHorizon === tab.key ? 'active' : ''}`}
-                onClick={() => {
-                  setTimeHorizon(tab.key);
-                  if (sortBy.includes('change-') || sortBy === 'change-desc' || sortBy === 'change-asc') {
-                    setSortBy(sortBy.includes('asc') ? `change-${tab.key}-asc` as any : `change-${tab.key}-desc` as any);
-                  }
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
+              <Grid size={13} />
+              <span>Heatmap</span>
+            </button>
+            <button
+              type="button"
+              className={`clean-view-btn ${viewMode === 'sectoral' ? 'active' : ''}`}
+              onClick={() => setViewMode('sectoral')}
+              title="Sectoral Flow View"
+            >
+              <BarChart3 size={13} />
+              <span>Sector Flow</span>
+            </button>
           </div>
         </div>
 
-        {/* AI Command Action Button */}
-        <button
-          type="button"
-          className="scanner-ai-analyze-btn"
-          onClick={() => triggerAiAnalysis(timeHorizon)}
-          title={`Command MarketPilot AI CoPilot to analyze ${horizonTag} top picks and breakout setups`}
-        >
-          <Sparkles size={14} className="sparkle-glow" />
-          <span>Ask AI: Analyze Top {horizonTag} Picks</span>
-          <ArrowUpRight size={13} />
-        </button>
+        <div className="scanner-clean-header-right">
+          {/* Quick Market Overview Pill */}
+          <div className="scanner-clean-stats-pill">
+            <span>{metrics.total} Assets</span>
+            <span className="stat-sep">·</span>
+            <span className="positive">▲ {metrics.bullish}</span>
+            <span className="stat-sep">·</span>
+            <span className="negative">▼ {metrics.bearish}</span>
+            {metrics.topGainer && (
+              <>
+                <span className="stat-sep">·</span>
+                <span 
+                  className="top-stat"
+                  onClick={() => setInspectedStock(metrics.topGainer)}
+                  title="Inspect top gainer"
+                >
+                  🏆 <strong>{metrics.topGainer.symbol}</strong> <span className="positive">+{getStockReturn(metrics.topGainer, timeHorizon).toFixed(1)}%</span>
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Sync Live Quotes Button */}
+          <button
+            type="button"
+            className="scanner-clean-icon-btn"
+            onClick={() => refreshStocks(false)}
+            disabled={isRefreshing}
+            title="Fetch latest live exchange quotes"
+          >
+            <RefreshCw size={12} className={isRefreshing ? 'spin' : ''} />
+            <span>{isRefreshing ? 'Syncing…' : 'Sync'}</span>
+          </button>
+
+          {/* AI Command Button */}
+          <button
+            type="button"
+            className="scanner-clean-ai-btn"
+            onClick={() => triggerAiAnalysis(timeHorizon)}
+            title={`Analyze ${horizonTag} top setups with MarketPilot AI`}
+          >
+            <Sparkles size={12} />
+            <span>Ask AI</span>
+          </button>
+        </div>
       </div>
 
-      {/* 2. Algorithmic Screener Presets */}
-      <div className="scanner-presets-bar">
-        <button
-          type="button"
-          className={`preset-chip ${activePreset === 'all' && selectedSector === 'ALL' && !query.trim() && sortBy === 'all' ? 'active' : ''}`}
-          onClick={handleResetToAll}
-          title="Show all instruments and reset all filters"
-        >
-          All Instruments ({currentStocksList.length})
-        </button>
-        <button
-          type="button"
-          className={`preset-chip highlight-chip ${activePreset === 'fast-movers' ? 'active' : ''}`}
-          onClick={() => {
-            setActivePreset('fast-movers');
-            setSortBy(`change-${timeHorizon}-desc` as any);
-          }}
-          title="Show active stocks moving > 0.5% (Fast Movers)"
-        >
-          <Zap size={13} /> ⚡ Fast Movers &gt; ±0.5% ({metrics.fastMoversCount})
-        </button>
-        <button
-          type="button"
-          className={`preset-chip ai-chip ${activePreset === 'ai-picks' ? 'active' : ''}`}
-          onClick={() => {
-            setActivePreset('ai-picks');
-            setSortBy('ai-desc');
-          }}
-        >
-          <Sparkles size={13} /> ✨ AI Top Picks ({metrics.aiTopCount})
-        </button>
-        <button
-          type="button"
-          className={`preset-chip green ${activePreset === 'gainers' ? 'active' : ''}`}
-          onClick={() => {
-            setActivePreset('gainers');
-            setSortBy(`change-${timeHorizon}-desc` as any);
-          }}
-        >
-          <TrendingUp size={13} /> 🔥 {horizonTag} Gainers ({metrics.bullish})
-        </button>
-        <button
-          type="button"
-          className={`preset-chip red ${activePreset === 'losers' ? 'active' : ''}`}
-          onClick={() => {
-            setActivePreset('losers');
-            setSortBy(`change-${timeHorizon}-asc` as any);
-          }}
-        >
-          <TrendingDown size={13} /> 🔻 {horizonTag} Losers ({metrics.bearish})
-        </button>
-        <button
-          type="button"
-          className={`preset-chip ${activePreset === 'breakout' ? 'active' : ''}`}
-          onClick={() => {
-            setActivePreset('breakout');
-            setSortBy('change-desc');
-          }}
-        >
-          <Zap size={13} /> ⚡ Breakout Setups ({metrics.breakoutCount})
-        </button>
-        <button
-          type="button"
-          className={`preset-chip ${activePreset === 'dip' ? 'active' : ''}`}
-          onClick={() => {
-            setActivePreset('dip');
-            setSortBy('rsi-asc');
-          }}
-        >
-          <TrendingDown size={13} /> 🎯 Pullback / Dip Buy ({metrics.dipCount})
-        </button>
-        <button
-          type="button"
-          className={`preset-chip ${activePreset === 'watchlist' ? 'active' : ''}`}
-          onClick={() => setActivePreset('watchlist')}
-        >
-          <Star size={13} /> Watchlist ({watchlist.length})
-        </button>
+      {/* 2. Unified Filter Strip: Presets & Time Horizon in One Clean Row */}
+      <div className="scanner-clean-filter-strip">
+        <div className="clean-preset-pills">
+          <button
+            type="button"
+            className={`clean-preset-pill ${activePreset === 'all' && selectedSector === 'ALL' && !query.trim() && sortBy === 'all' ? 'active' : ''}`}
+            onClick={handleResetToAll}
+          >
+            All ({currentStocksList.length})
+          </button>
+          <button
+            type="button"
+            className={`clean-preset-pill ${activePreset === 'fast-movers' ? 'active' : ''}`}
+            onClick={() => {
+              setActivePreset('fast-movers');
+              setSortBy(`change-${timeHorizon}-desc` as any);
+            }}
+          >
+            <Zap size={12} /> Fast Movers ({metrics.fastMoversCount})
+          </button>
+          <button
+            type="button"
+            className={`clean-preset-pill ${activePreset === 'ai-picks' ? 'active ai' : ''}`}
+            onClick={() => {
+              setActivePreset('ai-picks');
+              setSortBy('ai-desc');
+            }}
+          >
+            <Sparkles size={12} /> AI Top Picks ({metrics.aiTopCount})
+          </button>
+          <button
+            type="button"
+            className={`clean-preset-pill ${activePreset === 'gainers' ? 'active green' : ''}`}
+            onClick={() => {
+              setActivePreset('gainers');
+              setSortBy(`change-${timeHorizon}-desc` as any);
+            }}
+          >
+            <TrendingUp size={12} /> Gainers ({metrics.bullish})
+          </button>
+          <button
+            type="button"
+            className={`clean-preset-pill ${activePreset === 'losers' ? 'active red' : ''}`}
+            onClick={() => {
+              setActivePreset('losers');
+              setSortBy(`change-${timeHorizon}-asc` as any);
+            }}
+          >
+            <TrendingDown size={12} /> Losers ({metrics.bearish})
+          </button>
+          <button
+            type="button"
+            className={`clean-preset-pill ${activePreset === 'breakout' ? 'active' : ''}`}
+            onClick={() => {
+              setActivePreset('breakout');
+              setSortBy('change-desc');
+            }}
+          >
+            <Zap size={12} /> Breakout ({metrics.breakoutCount})
+          </button>
+          <button
+            type="button"
+            className={`clean-preset-pill ${activePreset === 'dip' ? 'active' : ''}`}
+            onClick={() => {
+              setActivePreset('dip');
+              setSortBy('rsi-asc');
+            }}
+          >
+            <TrendingDown size={12} /> Dip Buy ({metrics.dipCount})
+          </button>
+          <button
+            type="button"
+            className={`clean-preset-pill ${activePreset === 'watchlist' ? 'active' : ''}`}
+            onClick={() => setActivePreset('watchlist')}
+          >
+            <Star size={12} /> Watchlist ({watchlist.length})
+          </button>
+        </div>
+
+        {/* Compact Time Window Selector */}
+        <div className="clean-horizon-group">
+          {([
+            { key: '24h', label: '24H' },
+            { key: '3d', label: '3D' },
+            { key: '1w', label: '1W' },
+            { key: '1m', label: '1M' },
+          ] as const).map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              className={`clean-horizon-pill ${timeHorizon === tab.key ? 'active' : ''}`}
+              onClick={() => {
+                setTimeHorizon(tab.key);
+                if (sortBy.includes('change-') || sortBy === 'change-desc' || sortBy === 'change-asc') {
+                  setSortBy(sortBy.includes('asc') ? `change-${tab.key}-asc` as any : `change-${tab.key}-desc` as any);
+                }
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* 3. Search & Filters Toolbar */}
-      <div className="scanner-toolbar">
+      {/* 3. Search & Refine Toolbar */}
+      <div className="scanner-clean-toolbar">
         {/* Search Field */}
-        <div className="search-field scanner-search">
-          <Search size={16} />
+        <div className="search-field scanner-clean-search">
+          <Search size={15} />
           <input
             ref={searchInputRef}
             value={query}
@@ -551,7 +602,7 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
               onClick={() => setQuery('')}
               title="Clear search"
             >
-              <X size={14} />
+              <X size={13} />
             </button>
           ) : (
             <kbd>⌘ K</kbd>
@@ -559,19 +610,19 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
         </div>
 
         {/* Sector Filter Dropdown */}
-        <div className="scanner-filter-group">
-          <label>Sector:</label>
+        <div className="clean-filter-group">
+          <span className="filter-label">Sector:</span>
           <CustomSelect
             value={selectedSector}
             options={sectorOptions}
             onChange={(val) => setSelectedSector(val)}
-            minWidth={170}
+            minWidth={160}
           />
         </div>
 
         {/* Sorting Dropdown */}
-        <div className="scanner-filter-group">
-          <label>Sort by:</label>
+        <div className="clean-filter-group">
+          <span className="filter-label">Sort:</span>
           <CustomSelect
             value={sortBy}
             options={sortOptions}
@@ -590,26 +641,26 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
                 setTimeHorizon('1m');
               }
             }}
-            minWidth={225}
+            minWidth={185}
           />
         </div>
 
         {/* Result Counter & Reset Button */}
-        <div className="scanner-toolbar-right">
+        <div className="clean-toolbar-right">
           {isFiltered && (
             <button
               type="button"
-              className="scanner-reset-btn"
+              className="clean-reset-btn"
               onClick={handleResetToAll}
               title="Reset all filters and sorting"
             >
-              <RotateCcw size={12} />
-              Reset Filters
+              <RotateCcw size={11} />
+              Reset
             </button>
           )}
-          <div className="scanner-result-count">
+          <span className="clean-count-label">
             Showing <strong>{filteredStocks.length}</strong> of {currentStocksList.length}
-          </div>
+          </span>
         </div>
       </div>
 
@@ -627,6 +678,9 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
           watchlist={watchlist}
           onToggleWatch={onToggleWatch}
           onInspectStock={(stock) => setInspectedStock(stock)}
+          sourceBadge={sourceBadge}
+          marketStatusText={marketStatus}
+          lastUpdated={lastUpdatedTime}
         />
       ) : (
         <StockTable

@@ -7,6 +7,7 @@ import {
   fetchLiveChartPoints, 
   fetchGlobalMarketTickers,
   fetchLiveIndices,
+  getIndianMarketStatus,
   type MarketItem,
   type ChartPoint,
   type GlobalTickerItem
@@ -131,8 +132,8 @@ router.get('/overview', async (_req, res) => {
     const indices = liveRows.filter(x => x.category === 'Index');
     const nonIndices = liveRows.filter(x => x.category !== 'Index');
 
-    const movers = [...nonIndices].sort((a, b) => b.changePct - a.changePct).slice(0, 5);
-    const losers = [...nonIndices].sort((a, b) => a.changePct - b.changePct).slice(0, 5);
+    const movers = [...nonIndices].sort((a, b) => b.changePct - a.changePct).slice(0, 10);
+    const losers = [...nonIndices].sort((a, b) => a.changePct - b.changePct).slice(0, 10);
 
     const advancing = nonIndices.filter(x => x.changePct > 0).length;
     const declining = nonIndices.filter(x => x.changePct < 0).length;
@@ -143,29 +144,45 @@ router.get('/overview', async (_req, res) => {
     const vixItem = indices.find(x => x.symbol.includes('VIX'));
     const vixVal = vixItem?.price || 13.42;
 
-    // Dynamically calculate sector performance from real live stock movements
-    const sectorsMap: Record<string, { totalPct: number; count: number }> = {};
+    const marketStatus = getIndianMarketStatus();
+    const sourceBadge = liveRows.some(x => x.source === 'NSE') ? 'Live (NSE)' : 'Delayed data (Yahoo)';
+
+    // Dynamically calculate sector performance: both market-cap weighted AND simple average
+    const sectorsMap: Record<string, { totalPct: number; weightedSum: number; totalMcap: number; advancing: number; declining: number; count: number }> = {};
     for (const item of nonIndices) {
       if (!sectorsMap[item.category]) {
-        sectorsMap[item.category] = { totalPct: 0, count: 0 };
+        sectorsMap[item.category] = { totalPct: 0, weightedSum: 0, totalMcap: 0, advancing: 0, declining: 0, count: 0 };
       }
+      const mcap = item.marketCap || 50000;
       sectorsMap[item.category].totalPct += item.changePct;
+      sectorsMap[item.category].weightedSum += item.changePct * mcap;
+      sectorsMap[item.category].totalMcap += mcap;
       sectorsMap[item.category].count += 1;
+      if (item.changePct > 0) sectorsMap[item.category].advancing += 1;
+      else if (item.changePct < 0) sectorsMap[item.category].declining += 1;
     }
 
     const sectorHeatmap = Object.entries(sectorsMap).map(([name, data]) => ({
       name,
-      changePct: +(data.totalPct / (data.count || 1)).toFixed(2),
-      count: data.count
-    })).sort((a, b) => b.changePct - a.changePct);
+      changePct: +(data.totalPct / (data.count || 1)).toFixed(2), // Simple average
+      weightedChangePct: +(data.weightedSum / (data.totalMcap || 1)).toFixed(2), // Market-cap weighted average
+      count: data.count,
+      advancing: data.advancing,
+      declining: data.declining
+    })).sort((a, b) => b.weightedChangePct - a.weightedChangePct);
 
     res.json({
       dataMode: 'LIVE_EXCHANGE',
-      asOf: new Date().toISOString(),
+      asOf: marketStatus.asOf,
+      timeIST: marketStatus.timeIST,
+      marketStatus,
+      sourceBadge,
       message: 'Real-time Live Exchange Market Data Active (NSE / BSE)',
       indices,
       movers,
       losers,
+      top10Gainers: movers,
+      top10Losers: losers,
       marketBreadth: {
         advancing,
         declining,
@@ -182,10 +199,10 @@ router.get('/overview', async (_req, res) => {
         currency: 'INR Cr'
       },
       sectorHeatmap: sectorHeatmap.length > 0 ? sectorHeatmap : [
-        { name: 'Banking', changePct: 0.85, count: 4 },
-        { name: 'IT', changePct: -0.25, count: 3 },
-        { name: 'Energy', changePct: 0.76, count: 2 },
-        { name: 'Auto', changePct: -0.65, count: 1 }
+        { name: 'Banking', changePct: 0.85, weightedChangePct: 0.92, count: 4, advancing: 3, declining: 1 },
+        { name: 'IT', changePct: -0.25, weightedChangePct: -0.30, count: 3, advancing: 1, declining: 2 },
+        { name: 'Energy', changePct: 0.76, weightedChangePct: 0.88, count: 2, advancing: 2, declining: 0 },
+        { name: 'Auto', changePct: -0.65, weightedChangePct: -0.55, count: 1, advancing: 0, declining: 1 }
       ],
       sectoralIndices: liveIndices.sectoral,
       broadIndices: liveIndices.broad
@@ -217,14 +234,18 @@ router.get('/chart', async (req, res) => {
   // Attempt live chart points if not in mock mode
   if (!isMock) {
     try {
-      const livePoints = await fetchLiveChartPoints(symbol, range);
+      const [livePoints, liveQuote] = await Promise.all([
+        fetchLiveChartPoints(symbol, range),
+        fetchLiveQuote(symbol).catch(() => null)
+      ]);
+
       if (livePoints && livePoints.length > 0) {
         const prices = livePoints.map(p => p.v);
-        const dayHigh = Math.max(...prices);
-        const dayLow = Math.min(...prices);
-        const currentPrice = livePoints[livePoints.length - 1]?.close || livePoints[livePoints.length - 1]?.v || 0;
-        const firstPrice = livePoints[0]?.open || livePoints[0]?.v || currentPrice;
-        const changePct = firstPrice > 0 ? +(((currentPrice - firstPrice) / firstPrice) * 100).toFixed(2) : 0;
+        const currentPrice = liveQuote?.price ?? (livePoints[livePoints.length - 1]?.close || livePoints[livePoints.length - 1]?.v || 0);
+        const prevClose = liveQuote?.previousClose ?? (liveQuote?.price ? +(liveQuote.price / (1 + (liveQuote.changePct || 0) / 100)).toFixed(2) : currentPrice);
+        const changePct = liveQuote?.changePct ?? (prevClose > 0 ? +(((currentPrice - prevClose) / prevClose) * 100).toFixed(2) : 0);
+        const dayHigh = liveQuote?.dayHigh ?? Math.max(...prices, currentPrice);
+        const dayLow = liveQuote?.dayLow ?? Math.min(...prices, currentPrice);
 
         return res.json({
           dataMode: 'LIVE_EXCHANGE',
@@ -232,6 +253,7 @@ router.get('/chart', async (req, res) => {
           range,
           currentPrice,
           changePct,
+          previousClose: prevClose,
           high: dayHigh,
           low: dayLow,
           points: livePoints
@@ -326,10 +348,22 @@ router.get('/stocks', async (req, res) => {
   }
 
   const filtered = rows.filter(x => !q || x.symbol.toLowerCase().includes(q) || x.name.toLowerCase().includes(q) || x.category.toLowerCase().includes(q));
+  const marketStatus = getIndianMarketStatus();
+  const sourceBadge = rows.some(x => x.source === 'NSE') ? 'Live (NSE)' : 'Delayed data (Yahoo)';
+
+  const nonIndices = rows.filter(x => x.category !== 'Index');
+  const top10Gainers = [...nonIndices].sort((a, b) => b.changePct - a.changePct).slice(0, 10);
+  const top10Losers = [...nonIndices].sort((a, b) => a.changePct - b.changePct).slice(0, 10);
 
   res.json({
     dataMode: isMock ? 'DEMO' : 'LIVE_EXCHANGE',
-    results: filtered
+    asOf: marketStatus.asOf,
+    timeIST: marketStatus.timeIST,
+    marketStatus,
+    sourceBadge,
+    results: filtered,
+    top10Gainers,
+    top10Losers
   });
 });
 

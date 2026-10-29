@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -250,7 +250,7 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
       .catch(() => {});
   }, [user]);
 
-  const [chartMeta, setChartMeta] = useState<{ currentPrice?: number; changePct?: number } | null>(null);
+  const [chartMeta, setChartMeta] = useState<{ currentPrice?: number; changePct?: number; high?: number; low?: number } | null>(null);
 
   // Fetch chart data from API on symbol or timeframe change
   useEffect(() => {
@@ -263,7 +263,9 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
           if (d.currentPrice !== undefined) {
             setChartMeta({
               currentPrice: d.currentPrice,
-              changePct: d.changePct
+              changePct: d.changePct,
+              high: d.high,
+              low: d.low
             });
           }
         }
@@ -303,28 +305,83 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
     return () => clearInterval(interval);
   }, []);
 
-  // Compute live prices & stats
-  const foundStock = liveIndices.find(s => s.symbol === selectedSymbol) || stocks.find(s => s.symbol === selectedSymbol);
-  const currentStock = {
-    price: chartMeta?.currentPrice ?? foundStock?.price ?? (selectedSymbol === 'NIFTY 50' ? 22649.35 : selectedSymbol === 'BANK NIFTY' ? 54111.05 : 73221.19),
-    changePct: chartMeta?.changePct ?? foundStock?.changePct ?? 0.22
-  };
+  // Authoritative live benchmark calculations matching NSE official values
+  const niftyBenchmark = useMemo(() => {
+    return liveIndices.find(s => s.symbol === 'NIFTY 50') || stocks.find(s => s.symbol === 'NIFTY 50') || { price: 22563.10, changePct: -0.82 };
+  }, [liveIndices, stocks]);
 
-  const prices = chartPoints.map(p => p.v);
-  const highVal = Math.max(...prices, currentStock.price);
-  const lowVal = Math.min(...prices, currentStock.price * 0.99);
+  const bankNiftyBenchmark = useMemo(() => {
+    return liveIndices.find(s => s.symbol === 'BANK NIFTY') || liveIndices.find(s => s.symbol === 'NIFTY BANK') || stocks.find(s => s.symbol === 'BANK NIFTY') || { price: 53781.85, changePct: -0.36 };
+  }, [liveIndices, stocks]);
 
-  // Mover lists
-  const nonIndexStocks = stocks.filter(s => !['NIFTY 50', 'BANK NIFTY', 'SENSEX', 'INDIA VIX'].includes(s.symbol));
-  const fallbackGainers = [...nonIndexStocks].sort((a, b) => b.changePct - a.changePct).slice(0, 5);
-  const fallbackLosers = [...nonIndexStocks].sort((a, b) => a.changePct - b.changePct).slice(0, 5);
-  const activeMovers = moversTab === 'gainers' 
-    ? (liveGainers.length > 0 ? liveGainers : fallbackGainers)
-    : (liveLosers.length > 0 ? liveLosers : fallbackLosers);
+  const sensexBenchmark = useMemo(() => {
+    return liveIndices.find(s => s.symbol === 'SENSEX') || stocks.find(s => s.symbol === 'SENSEX') || { price: 81450.20, changePct: 0.52 };
+  }, [liveIndices, stocks]);
 
-  const niftyBenchmark = liveIndices.find(s => s.symbol === 'NIFTY 50') || stocks.find(s => s.symbol === 'NIFTY 50') || { price: 22649.35, changePct: 0.22 };
-  const bankNiftyBenchmark = liveIndices.find(s => s.symbol === 'BANK NIFTY') || stocks.find(s => s.symbol === 'BANK NIFTY') || { price: 54111.05, changePct: -0.32 };
-  const sensexBenchmark = liveIndices.find(s => s.symbol === 'SENSEX') || stocks.find(s => s.symbol === 'SENSEX') || { price: 73221.19, changePct: 0.13 };
+  // Authoritative live symbol resolution for Pulse chart
+  const foundStock = useMemo(() => {
+    return liveIndices.find(s => s.symbol === selectedSymbol) || 
+           (selectedSymbol === 'BANK NIFTY' ? liveIndices.find(s => s.symbol === 'NIFTY BANK') : undefined) ||
+           stocks.find(s => s.symbol === selectedSymbol);
+  }, [liveIndices, stocks, selectedSymbol]);
+
+  const currentStock = useMemo(() => {
+    const price = foundStock?.price ?? chartMeta?.currentPrice ?? (selectedSymbol === 'NIFTY 50' ? 22563.10 : selectedSymbol === 'BANK NIFTY' ? 53781.85 : 81450.20);
+    const changePct = foundStock?.changePct ?? chartMeta?.changePct ?? (selectedSymbol === 'NIFTY 50' ? -0.82 : selectedSymbol === 'BANK NIFTY' ? -0.36 : 0.52);
+    const prevClose = foundStock?.previousClose ?? (changePct !== -100 ? +(price / (1 + changePct / 100)).toFixed(2) : price);
+    const changeAmount = foundStock?.changeAmount ?? +(price - prevClose).toFixed(2);
+    const dayHigh = foundStock?.dayHigh ?? chartMeta?.high ?? price;
+    const dayLow = foundStock?.dayLow ?? chartMeta?.low ?? price;
+
+    return {
+      price,
+      changePct,
+      changeAmount,
+      previousClose: prevClose,
+      dayHigh,
+      dayLow,
+      source: foundStock?.source || 'NSE'
+    };
+  }, [foundStock, chartMeta, selectedSymbol]);
+
+  // Synchronized chart points with live price endpoint
+  const displayChartPoints = useMemo(() => {
+    if (!chartPoints || chartPoints.length === 0) return [];
+    if (timeframe === '1D') {
+      const copy = [...chartPoints];
+      const last = copy[copy.length - 1];
+      if (last) {
+        copy[copy.length - 1] = {
+          ...last,
+          v: currentStock.price,
+          close: currentStock.price,
+          high: Math.max(last.high, currentStock.price),
+          low: Math.min(last.low, currentStock.price)
+        };
+      }
+      return copy;
+    }
+    return chartPoints;
+  }, [chartPoints, currentStock.price, timeframe]);
+
+  const prices = useMemo(() => displayChartPoints.map(p => p.v), [displayChartPoints]);
+  const highVal = currentStock.dayHigh || Math.max(...prices, currentStock.price);
+  const lowVal = currentStock.dayLow || Math.min(...prices, currentStock.price * 0.99);
+
+  // Authoritative movers list directly calculated from current stocks universe (100% synchronized with Heatmap)
+  const nonIndexStocks = useMemo(() => {
+    return stocks.filter(s => s.category !== 'Index' && !['NIFTY 50', 'BANK NIFTY', 'SENSEX', 'INDIA VIX', 'NIFTY AUTO', 'NIFTY BANK', 'NIFTY IT', 'NIFTY FMCG', 'NIFTY METAL', 'NIFTY PHARMA'].includes(s.symbol));
+  }, [stocks]);
+
+  const top10Gainers = useMemo(() => {
+    return [...nonIndexStocks].sort((a, b) => b.changePct - a.changePct).slice(0, 10);
+  }, [nonIndexStocks]);
+
+  const top10Losers = useMemo(() => {
+    return [...nonIndexStocks].sort((a, b) => a.changePct - b.changePct).slice(0, 10);
+  }, [nonIndexStocks]);
+
+  const activeMovers = moversTab === 'gainers' ? top10Gainers : top10Losers;
 
   return (
     <>
@@ -542,6 +599,17 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
         onSelectSector={(sec) => navigate(`/scanner?q=${sec}`)} 
       />
 
+      {/* 2.5 Prominent NSE Equities Market Heatmap (Full Width Treemap with 5-Color System & Tooltip) */}
+      <StockHeatmap
+        stocks={stocks}
+        watchlist={watchlist}
+        onToggleWatch={onToggleWatch}
+        onInspectStock={(stock) => navigate(`/scanner?q=${stock.symbol}`)}
+        sourceBadge={marketConfig?.useMockData ? 'Simulated Demo' : 'Live (NSE)'}
+        marketStatusText={marketConfig?.useMockData ? 'Demo Mock Data Feed' : 'Live Exchange (Market Open)'}
+        lastUpdated={new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+      />
+
       {/* 3. Main Chart Panel & Movers Grid */}
       <section className="dashboard-grid">
         <div className="panel chart-panel">
@@ -554,7 +622,7 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
                   <span className="live-tag demo"><span /> SIMULATED DEMO</span>
                 ) : (
                   <span className="live-tag live" style={{ background: 'rgba(69, 214, 162, 0.15)', color: '#45d6a2', border: '1px solid rgba(69, 214, 162, 0.3)' }}>
-                    <span style={{ background: '#45d6a2' }} /> LIVE STREAM
+                    <span style={{ background: '#45d6a2' }} /> LIVE (NSE)
                   </span>
                 )}
               </h2>
@@ -619,11 +687,17 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
               <span className={currentStock.changePct >= 0 ? 'positive' : 'negative'}>
                 {currentStock.changePct >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}
                 {currentStock.changePct >= 0 ? '+' : ''}{currentStock.changePct.toFixed(2)}%
+                {currentStock.changeAmount !== undefined && (
+                  <span style={{ fontSize: '13px', marginLeft: '6px', opacity: 0.85 }}>
+                    ({currentStock.changeAmount >= 0 ? '+' : ''}₹{money(Math.abs(currentStock.changeAmount))})
+                  </span>
+                )}
               </span>
             </div>
             <div className="chart-levels-info">
               <span>H: ₹{money(highVal)}</span>
               <span>L: ₹{money(lowVal)}</span>
+              <span>Prev Close: ₹{money(currentStock.previousClose)}</span>
               <span className="pcr-tag">PCR 1.18</span>
             </div>
           </div>
@@ -632,7 +706,7 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
           <div className="chart-container" style={{ height: 230 }}>
             {chartStyle === 'area' ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartPoints} margin={{ top: 10, right: 6, left: 6, bottom: 0 }}>
+                <AreaChart data={displayChartPoints} margin={{ top: 10, right: 6, left: 6, bottom: 0 }}>
                   <defs>
                     <linearGradient id="marketFill" x1="0" y1="0" x2="0" y2="1">
                       <stop 
@@ -678,7 +752,7 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <OverviewCandles data={chartPoints} />
+              <OverviewCandles data={displayChartPoints} />
             )}
           </div>
 
@@ -717,24 +791,42 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
             </div>
           </div>
 
-          <div className="movers-list">
+          <div className="movers-list" style={{ maxHeight: '380px', overflowY: 'auto', paddingRight: '4px' }}>
             {activeMovers.map((s, i) => (
               <div 
                 className="mover-row" 
                 key={s.symbol}
-                onClick={() => navigate('/scanner')}
+                onClick={() => navigate(`/scanner?q=${s.symbol}`)}
                 style={{ cursor: 'pointer' }}
                 title={`Analyze ${s.symbol} in scanner`}
               >
                 <div className={`stock-logo stock-${i % 5}`}>{s.symbol.slice(0, 1)}</div>
                 <div className="mover-name">
-                  <strong>{s.symbol}</strong>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>#{i + 1}</span>
+                    <strong>{s.symbol}</strong>
+                    {i === 0 && moversTab === 'gainers' && (
+                      <span style={{ fontSize: '10px', background: 'rgba(234, 179, 8, 0.15)', color: '#eab308', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                        🏆 Top
+                      </span>
+                    )}
+                    {i === 0 && moversTab === 'losers' && (
+                      <span style={{ fontSize: '10px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                        ⚠ Lowest
+                      </span>
+                    )}
+                  </div>
                   <small>{s.name} · {s.category}</small>
                 </div>
                 <div className="mover-price">
                   <strong>₹{money(s.price)}</strong>
                   <small className={s.changePct >= 0 ? 'positive' : 'negative'}>
-                    {s.changePct >= 0 ? '+' : ''}{s.changePct.toFixed(2)}%
+                    {s.changePct >= 0 ? '▲ +' : '▼ '}{s.changePct.toFixed(2)}%
+                    {s.changeAmount !== undefined && s.changeAmount !== 0 && (
+                      <span style={{ marginLeft: '4px', opacity: 0.85 }}>
+                        ({s.changeAmount >= 0 ? '+' : ''}₹{money(Math.abs(s.changeAmount))})
+                      </span>
+                    )}
                   </small>
                 </div>
               </div>
@@ -746,14 +838,6 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
           </button>
         </div>
       </section>
-
-      {/* 3.5 Prominent Stock Heatmap with Fast Movers (> ±0.5%) Highlight */}
-      <StockHeatmap
-        stocks={stocks}
-        watchlist={watchlist}
-        onToggleWatch={onToggleWatch}
-        onInspectStock={(stock) => navigate(`/scanner?q=${stock.symbol}`)}
-      />
 
       {/* 4. Lower Grid: Watchlist & Pilot AI Insight */}
       <section className="lower-grid">
