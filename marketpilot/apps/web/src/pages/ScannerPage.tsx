@@ -106,7 +106,7 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
   const [liveStocks, setLiveStocks] = useState<Stock[]>(stocks);
   const [dataMode, setDataMode] = useState<'LIVE_EXCHANGE' | 'DEMO' | 'FALLBACK'>('LIVE_EXCHANGE');
   const [marketStatus, setMarketStatus] = useState<string>('Live Exchange (Market Open)');
-  const [sourceBadge, setSourceBadge] = useState<string>('Live (NSE)');
+  const [sourceBadge, setSourceBadge] = useState<string>('Live Stream');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string>('');
   const [inspectedChartPoints, setInspectedChartPoints] = useState<Array<{ t: string; v: number }>>([]);
@@ -377,7 +377,7 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
 
         {/* Feed & Market Session Indicator */}
         <div className="summary-status-strip">
-          <span className={`summary-source-pill ${sourceBadge.includes('NSE') ? 'nse' : 'yf'}`}>
+          <span className="summary-source-pill live">
             <span className="pulse-dot" /> {sourceBadge}
           </span>
           <span className="summary-market-status">
@@ -392,7 +392,7 @@ export function ScannerPage({ stocks, watchlist, onToggleWatch }: ScannerPagePro
           <div className="scanner-clean-title-group">
             <h2>Market Scanner</h2>
             <span className="scanner-clean-live-pill">
-              <span className="live-dot" /> LIVE NSE
+              <span className="live-dot" /> LIVE STREAM
             </span>
             {lastUpdatedTime && (
               <span className="scanner-clean-time">

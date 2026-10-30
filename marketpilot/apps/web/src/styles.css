@@ -13404,3 +13404,74 @@ tbody tr:hover {
 .clean-count-label strong {
   color: #cbd5e1;
 }
+
+
+/* Real-Time Market Data Feed Engine Switcher (Admin) */
+.feed-engine-logo {
+  background: linear-gradient(135deg, #0284c7, #2563eb);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #fff;
+}
+
+.feed-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #111a2e;
+  color: #94a3b8;
+  border: 1px solid #1e293b;
+  transition: all 0.2s ease;
+}
+
+.feed-switch-btn:hover:not(:disabled) {
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+.feed-switch-btn.active-dhan {
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid #a855f7;
+  color: #c084fc;
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.25);
+}
+
+.feed-switch-btn.active-nse {
+  background: rgba(69, 214, 162, 0.15);
+  border: 1px solid #45d6a2;
+  color: #45d6a2;
+  box-shadow: 0 0 16px rgba(69, 214, 162, 0.25);
+}
+
+.feed-switch-btn .active-badge {
+  background: currentColor;
+  color: #0b111c;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+
+.provider-stat-box {
+  background: rgba(11, 17, 28, 0.7);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.25s ease;
+}
+
+.provider-stat-box.highlight-dhan {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(14, 22, 36, 0.95));
+}
+
+.provider-stat-box.highlight-nse {
+  background: linear-gradient(135deg, rgba(69, 214, 162, 0.08), rgba(14, 22, 36, 0.95));
+}

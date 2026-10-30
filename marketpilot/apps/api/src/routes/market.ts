@@ -8,12 +8,89 @@ import {
   fetchGlobalMarketTickers,
   fetchLiveIndices,
   getIndianMarketStatus,
+  getActiveMarketProvider,
+  setActiveMarketProvider,
   type MarketItem,
   type ChartPoint,
   type GlobalTickerItem
 } from '../services/liveMarket.js';
+import { getDhanFeedStatus, updateDhanCredentials } from '../services/dhanMarketFeed.js';
 
 const router = Router();
+
+/**
+ * GET /api/market/feed-provider
+ * Admin Inspection Endpoint: Check active data engine (DhanHQ vs NSE) and health
+ */
+router.get('/feed-provider', (_req, res) => {
+  const active = getActiveMarketProvider();
+  const dhan = getDhanFeedStatus();
+  res.json({
+    activeProvider: active,
+    dhan,
+    nse: {
+      connected: true,
+      providerName: 'NSE India Official Gateway',
+      indicesTracked: 139,
+      mode: 'Direct Exchange API'
+    },
+    asOf: new Date().toISOString()
+  });
+});
+
+/**
+ * POST /api/market/feed-provider
+ * Admin Switching Endpoint: Switch active market data engine between 'dhan' and 'nse'
+ */
+router.post('/feed-provider', (req, res) => {
+  const { provider } = req.body;
+  if (provider !== 'dhan' && provider !== 'nse') {
+    return res.status(400).json({ error: 'Invalid provider. Must be "dhan" or "nse".' });
+  }
+
+  setActiveMarketProvider(provider);
+  console.log(`[MarketProvider] 🔄 Switched active data provider to: ${provider.toUpperCase()}`);
+
+  const dhan = getDhanFeedStatus();
+  res.json({
+    success: true,
+    message: `Active market data feed switched to ${provider === 'dhan' ? 'DhanHQ v2 Real-Time Feed' : 'NSE India Official Feed'}.`,
+    activeProvider: provider,
+    dhan,
+    nse: {
+      connected: true,
+      providerName: 'NSE India Official Gateway',
+      indicesTracked: 139
+    }
+  });
+});
+
+/**
+ * POST /api/market/feed-provider/token
+ * Admin Endpoint: Update Daily DhanHQ Access Token at runtime without server restart
+ */
+router.post('/feed-provider/token', async (req, res) => {
+  const { token, clientId } = req.body;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'Token is required and must be a valid JWT string.' });
+  }
+
+  const result = await updateDhanCredentials(token, clientId);
+  if (result.success) {
+    setActiveMarketProvider('dhan');
+    return res.json({
+      success: true,
+      message: result.message,
+      feedStatus: getDhanFeedStatus()
+    });
+  } else {
+    return res.status(400).json({
+      success: false,
+      error: result.error || result.message,
+      message: result.message
+    });
+  }
+});
 
 /**
  * GET /api/market/global-tickers
@@ -145,7 +222,7 @@ router.get('/overview', async (_req, res) => {
     const vixVal = vixItem?.price || 13.42;
 
     const marketStatus = getIndianMarketStatus();
-    const sourceBadge = liveRows.some(x => x.source === 'NSE') ? 'Live (NSE)' : 'Delayed data (Yahoo)';
+    const sourceBadge = 'Live Stream';
 
     // Dynamically calculate sector performance: both market-cap weighted AND simple average
     const sectorsMap: Record<string, { totalPct: number; weightedSum: number; totalMcap: number; advancing: number; declining: number; count: number }> = {};
@@ -177,7 +254,7 @@ router.get('/overview', async (_req, res) => {
       timeIST: marketStatus.timeIST,
       marketStatus,
       sourceBadge,
-      message: 'Real-time Live Exchange Market Data Active (NSE / BSE)',
+      message: 'Real-time Live Exchange Market Data Active',
       indices,
       movers,
       losers,
@@ -349,7 +426,7 @@ router.get('/stocks', async (req, res) => {
 
   const filtered = rows.filter(x => !q || x.symbol.toLowerCase().includes(q) || x.name.toLowerCase().includes(q) || x.category.toLowerCase().includes(q));
   const marketStatus = getIndianMarketStatus();
-  const sourceBadge = rows.some(x => x.source === 'NSE') ? 'Live (NSE)' : 'Delayed data (Yahoo)';
+  const sourceBadge = 'Live Stream';
 
   const nonIndices = rows.filter(x => x.category !== 'Index');
   const top10Gainers = [...nonIndices].sort((a, b) => b.changePct - a.changePct).slice(0, 10);

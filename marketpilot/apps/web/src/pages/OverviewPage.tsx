@@ -408,14 +408,10 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
           <strong style={{ color: '#f1f5f9' }}>
             {marketConfig?.useMockData 
               ? 'Demo Mock Data Feed Active' 
-              : (dhanStatus?.connected 
-                  ? (user && dhanStatus.data?.dhanClientId 
-                      ? `Live DhanHQ Feed (Client: ${dhanStatus.data.dhanClientId})` 
-                      : 'Live Exchange Feed Active (NSE / BSE)') 
-                  : 'Live Exchange Feed Active (NSE / BSE)')}
+              : 'Real-Time Market Data Active'}
           </strong>
           <span style={{ color: '#64748b' }}>
-            · {marketConfig?.useMockData ? 'Synthetic offline simulation' : 'Real-time gateway from National Stock Exchange'}
+            · {marketConfig?.useMockData ? 'Synthetic offline simulation' : 'Live exchange streaming gateway'}
           </span>
         </div>
 
@@ -605,7 +601,7 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
         watchlist={watchlist}
         onToggleWatch={onToggleWatch}
         onInspectStock={(stock) => navigate(`/scanner?q=${stock.symbol}`)}
-        sourceBadge={marketConfig?.useMockData ? 'Simulated Demo' : 'Live (NSE)'}
+        sourceBadge={marketConfig?.useMockData ? 'Simulated Demo' : 'Live Stream'}
         marketStatusText={marketConfig?.useMockData ? 'Demo Mock Data Feed' : 'Live Exchange (Market Open)'}
         lastUpdated={new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
       />
@@ -622,7 +618,7 @@ export function OverviewPage({ stocks, watchlist, user, onToggleWatch, onShowToa
                   <span className="live-tag demo"><span /> SIMULATED DEMO</span>
                 ) : (
                   <span className="live-tag live" style={{ background: 'rgba(69, 214, 162, 0.15)', color: '#45d6a2', border: '1px solid rgba(69, 214, 162, 0.3)' }}>
-                    <span style={{ background: '#45d6a2' }} /> LIVE (NSE)
+                    <span style={{ background: '#45d6a2' }} /> LIVE STREAM
                   </span>
                 )}
               </h2>

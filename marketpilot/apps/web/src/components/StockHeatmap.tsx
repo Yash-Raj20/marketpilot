@@ -103,7 +103,7 @@ export function StockHeatmap({
   watchlist, 
   onToggleWatch, 
   onInspectStock,
-  sourceBadge = 'Live (NSE)',
+  sourceBadge = 'Live Stream',
   marketStatusText = 'Live Exchange (Market Open)',
   lastUpdated
 }: StockHeatmapProps) {
@@ -347,10 +347,10 @@ export function StockHeatmap({
         <div className="header-meta-group">
           <div className="heatmap-headline-row">
             <Flame size={20} className="flame-icon" />
-            <h2>NSE Equities Market Heatmap</h2>
+            <h2>Equities Market Heatmap</h2>
             
-            {/* Live Exchange / Yahoo Badge */}
-            <span className={`live-feed-badge ${sourceBadge.includes('NSE') ? 'nse-badge' : 'yf-badge'}`}>
+            {/* Live Exchange Feed Badge */}
+            <span className="live-feed-badge live-badge">
               <Radio size={12} className="pulse-dot" />
               {sourceBadge}
             </span>
@@ -367,7 +367,7 @@ export function StockHeatmap({
             </span>
           </div>
           <p className="heatmap-subtitle">
-            Treemap layout weighted by Market Capitalization. Color scale represents net percentage change from official NSE Previous Close.
+            Treemap layout weighted by Market Capitalization. Color scale represents net percentage change from official Previous Close.
           </p>
         </div>
 
@@ -651,8 +651,8 @@ export function StockHeatmap({
               <strong className="tt-symbol">{hoveredStock.symbol}</strong>
               <span className="tt-name">{hoveredStock.name}</span>
             </div>
-            <span className={`tt-source-pill ${hoveredStock.source === 'NSE' ? 'nse' : 'yf'}`}>
-              {hoveredStock.source === 'NSE' ? '🟢 Live (NSE)' : '🟡 Delayed (Yahoo)'}
+            <span className="tt-source-pill live">
+              ⚡ Real-Time Feed
             </span>
           </div>
 

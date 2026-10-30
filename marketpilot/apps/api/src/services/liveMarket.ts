@@ -1,4 +1,27 @@
 import { marketRows, sectoralIndices, broadIndices, formatMarketCap, SPECIAL_SYMBOLS_MAP } from './market.js';
+import {
+  fetchDhanBatchQuotes,
+  getDhanCachedQuote,
+  getDhanFeedStatus,
+  updateDhanCredentials,
+  restartDhanWebSocket,
+  isDhanTokenPresent,
+  DHAN_EQUITY_MAP,
+  DHAN_INDEX_MAP
+} from './dhanMarketFeed.js';
+
+let activeMarketProvider: 'dhan' | 'nse' = 'dhan';
+
+export function getActiveMarketProvider(): 'dhan' | 'nse' {
+  return activeMarketProvider;
+}
+
+export function setActiveMarketProvider(provider: 'dhan' | 'nse') {
+  activeMarketProvider = provider;
+  if (provider === 'dhan') {
+    fetchDhanBatchQuotes(true).catch(() => {});
+  }
+}
 
 export interface MarketItem {
   symbol: string;
@@ -18,7 +41,11 @@ export interface MarketItem {
   week52Low?: number;
   marketCap?: number; // In ₹ Crores
   marketCapFormatted?: string; // e.g. "₹19.80L Cr"
-  source: 'NSE' | 'YF'; // Hidden field for data source verification
+  source: 'NSE' | 'YF' | 'DHAN'; // Hidden field for data source verification
+  depth?: {
+    buy: Array<{ price: number; quantity: number; orders?: number }>;
+    sell: Array<{ price: number; quantity: number; orders?: number }>;
+  };
   status?: string;
   aiScore?: number;
   aiSignal?: string;
@@ -423,6 +450,15 @@ export async function fetchNseAllIndicesMap(): Promise<Map<string, MarketItem> |
 export async function fetchLiveQuote(symbol: string): Promise<MarketItem | null> {
   const sym = symbol.toUpperCase().trim();
 
+  // 0. Primary Provider: DhanHQ Real-Time Cache if Dhan is active provider
+  if (activeMarketProvider === 'dhan') {
+    const dhanItem = getDhanCachedQuote(sym);
+    if (dhanItem) return dhanItem;
+    await fetchDhanBatchQuotes();
+    const refreshed = getDhanCachedQuote(sym);
+    if (refreshed) return refreshed;
+  }
+
   // 1. Check Primary NSE Index Map first if symbol is an index or benchmark
   if (sym.startsWith('NIFTY') || sym === 'BANK NIFTY' || sym === 'INDIA VIX') {
     const nseMap = await fetchNseAllIndicesMap();
@@ -590,6 +626,64 @@ export async function fetchLiveIndices(): Promise<{
   sectoral: MarketItem[];
   broad: MarketItem[];
 }> {
+  // 0. Priority Provider: DhanHQ Feed if active provider is Dhan
+  if (activeMarketProvider === 'dhan') {
+    await fetchDhanBatchQuotes();
+    let dhanHits = 0;
+    const sectoral = sectoralIndices.map(idx => {
+      const live = getDhanCachedQuote(idx.symbol);
+      if (live) {
+        dhanHits++;
+        return live;
+      }
+      const prevClose = idx.previousClose ?? +(idx.price / (1 + idx.changePct / 100)).toFixed(2);
+      const changeAmount = idx.changeAmount ?? +(idx.price - prevClose).toFixed(2);
+      return {
+        symbol: idx.symbol,
+        name: idx.name,
+        price: idx.price,
+        changePct: idx.changePct,
+        changeAmount,
+        previousClose: prevClose,
+        open: idx.open ?? prevClose,
+        category: 'Sectoral' as const,
+        volume: idx.volume || '1.4M',
+        rsi: idx.rsi || 50,
+        source: 'NSE' as const,
+        status: 'Active'
+      };
+    });
+
+    const broad = broadIndices.map(idx => {
+      const live = getDhanCachedQuote(idx.symbol);
+      if (live) {
+        dhanHits++;
+        return live;
+      }
+      const prevClose = idx.previousClose ?? +(idx.price / (1 + idx.changePct / 100)).toFixed(2);
+      const changeAmount = idx.changeAmount ?? +(idx.price - prevClose).toFixed(2);
+      return {
+        symbol: idx.symbol,
+        name: idx.name,
+        price: idx.price,
+        changePct: idx.changePct,
+        changeAmount,
+        previousClose: prevClose,
+        open: idx.open ?? prevClose,
+        category: 'Broad' as const,
+        volume: idx.volume || '18.2M',
+        rsi: idx.rsi || 50,
+        source: 'NSE' as const,
+        status: 'Active'
+      };
+    });
+
+    if (dhanHits > 0) {
+      return { sectoral, broad };
+    }
+    console.warn('[LiveMarket] Dhan feed returned 0 indices, falling back to official NSE India API');
+  }
+
   // 1. Primary Source: Direct Official NSE India allIndices API
   const nseMap = await fetchNseAllIndicesMap();
 
@@ -696,6 +790,26 @@ export async function fetchLiveIndices(): Promise<{
  * Fetch all stocks and indices with live quotes in parallel
  */
 export async function fetchAllLiveMarketRows(): Promise<MarketItem[]> {
+  // 0. Priority Provider: DhanHQ Feed if active provider is Dhan
+  if (activeMarketProvider === 'dhan') {
+    await fetchDhanBatchQuotes();
+    let dhanSuccess = 0;
+    const dhanRows = marketRows.map(row => {
+      const live = getDhanCachedQuote(row.symbol);
+      if (live) {
+        dhanSuccess++;
+        return live;
+      }
+      const ai = computeAiScore({ price: row.price, changePct: row.changePct, rsi: row.rsi });
+      return { ...row, aiScore: ai.aiScore, aiSignal: ai.aiSignal, aiReason: ai.aiReason, source: 'NSE' as const };
+    });
+
+    if (dhanSuccess > 0) {
+      return dhanRows;
+    }
+    console.warn('[LiveMarket] Dhan feed returned 0 quotes, falling back to NSE/Yahoo');
+  }
+
   const promises = marketRows.map(async row => {
     const live = await fetchLiveQuote(row.symbol);
     if (live) return live;

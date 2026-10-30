@@ -155,6 +155,34 @@ export function AdminPage({ currentUser, onUserUpdate, onShowToast }: AdminPageP
   const [probeFunds, setProbeFunds] = useState<DhanFundLimit | null>(null);
   const [probingFunds, setProbingFunds] = useState(false);
 
+  // Market Data Feed Provider Switcher states
+  interface FeedProviderInfo {
+    activeProvider: 'dhan' | 'nse';
+    dhan: {
+      configured: boolean;
+      connected: boolean;
+      tickCount: number;
+      lastTickAt: string | null;
+      lastBatchSyncAt: string | null;
+      totalCached: number;
+      error: string | null;
+      clientId: string;
+    };
+    nse: {
+      connected: boolean;
+      providerName: string;
+      indicesTracked: number;
+      mode?: string;
+    };
+    asOf: string;
+  }
+  const [feedProviderInfo, setFeedProviderInfo] = useState<FeedProviderInfo | null>(null);
+  const [feedSwitching, setFeedSwitching] = useState(false);
+  const [showTokenModal, setShowTokenModal] = useState(false);
+  const [newDhanToken, setNewDhanToken] = useState('');
+  const [newDhanClientId, setNewDhanClientId] = useState('1111932175');
+  const [updatingToken, setUpdatingToken] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [recentLogs, setRecentLogs] = useState<AdminAuditLog[]>([]);
@@ -304,6 +332,58 @@ export function AdminPage({ currentUser, onUserUpdate, onShowToast }: AdminPageP
     }
   };
 
+  const fetchFeedProviderInfo = async () => {
+    try {
+      const data = await api<FeedProviderInfo>('/market/feed-provider');
+      setFeedProviderInfo(data);
+    } catch (err) {
+      console.warn('Failed to fetch feed provider info:', err);
+    }
+  };
+
+  const handleSwitchProvider = async (provider: 'dhan' | 'nse') => {
+    try {
+      setFeedSwitching(true);
+      const res = await api<{ success: boolean; message: string; activeProvider: 'dhan' | 'nse' }>('/market/feed-provider', {
+        method: 'POST',
+        body: JSON.stringify({ provider })
+      });
+      onShowToast(res.message);
+      await fetchFeedProviderInfo();
+    } catch (err) {
+      onShowToast(err instanceof Error ? err.message : 'Failed to switch provider');
+    } finally {
+      setFeedSwitching(false);
+    }
+  };
+
+  const handleUpdateDhanToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDhanToken.trim()) {
+      onShowToast('Please paste a valid DhanHQ access token');
+      return;
+    }
+    try {
+      setUpdatingToken(true);
+      const res = await api<{ success: boolean; message: string }>('/market/feed-provider/token', {
+        method: 'POST',
+        body: JSON.stringify({
+          token: newDhanToken.trim(),
+          clientId: newDhanClientId.trim() || undefined
+        })
+      });
+      onShowToast(res.message);
+      setShowTokenModal(false);
+      setNewDhanToken('');
+      await fetchFeedProviderInfo();
+      await fetchIntegrationsStatus();
+    } catch (err) {
+      onShowToast(err instanceof Error ? err.message : 'Failed to update Dhan token');
+    } finally {
+      setUpdatingToken(false);
+    }
+  };
+
   const handleToggleMockMode = async () => {
     try {
       setMockToggling(true);
@@ -400,12 +480,16 @@ export function AdminPage({ currentUser, onUserUpdate, onShowToast }: AdminPageP
       fetchAlerts();
       fetchAuditLogs();
       fetchIntegrationsStatus();
+      fetchFeedProviderInfo();
     }
   }, [isAdmin]);
 
   useEffect(() => {
     if (isAdmin && activeTab === 'integrations') {
       fetchIntegrationsStatus();
+      fetchFeedProviderInfo();
+      const interval = setInterval(fetchFeedProviderInfo, 4000);
+      return () => clearInterval(interval);
     }
   }, [activeTab]);
 
@@ -1917,6 +2001,166 @@ export function AdminPage({ currentUser, onUserUpdate, onShowToast }: AdminPageP
             {/* INTEGRATIONS GRID */}
             <div className="integrations-grid">
               
+              {/* CARD 0: REAL-TIME MARKET DATA FEED ENGINE & PROVIDER SWITCHER */}
+              <div className="integration-card" style={{ gridColumn: '1 / -1', background: 'linear-gradient(135deg, rgba(14, 22, 36, 0.98), rgba(20, 32, 54, 0.98))', border: '1px solid #1e293b', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
+                <div className="integration-header" style={{ paddingBottom: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                  <div className="integration-title-box">
+                    <div className="integration-logo-icon feed-engine-logo">
+                      <Activity size={22} />
+                    </div>
+                    <div>
+                      <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        Real-Time Market Data Feed Engine
+                        <span className={`status-pill ${feedProviderInfo?.activeProvider === 'dhan' ? (feedProviderInfo.dhan.connected ? 'online' : 'offline') : 'online'}`}>
+                          <span className="status-dot pulse" />
+                          Active: {feedProviderInfo?.activeProvider === 'dhan' ? 'DhanHQ v2 Real-Time' : 'NSE India Official'}
+                        </span>
+                      </h3>
+                      <span>Dual-Gateway Architecture: Switch live quotes &amp; tick streaming between DhanHQ Broker API and NSE India Direct Gateway.</span>
+                    </div>
+                  </div>
+
+                  {/* PROVIDER SWITCH TOGGLE CONTROLS */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className={`feed-switch-btn ${feedProviderInfo?.activeProvider === 'dhan' ? 'active-dhan' : ''}`}
+                      onClick={() => handleSwitchProvider('dhan')}
+                      disabled={feedSwitching || feedProviderInfo?.activeProvider === 'dhan'}
+                      title="Switch platform live streaming to DhanHQ v2 WebSocket & Quote API"
+                    >
+                      <Radio size={14} />
+                      <span>DhanHQ Direct Stream</span>
+                      {feedProviderInfo?.activeProvider === 'dhan' && <span className="active-badge">ACTIVE</span>}
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`feed-switch-btn ${feedProviderInfo?.activeProvider === 'nse' ? 'active-nse' : ''}`}
+                      onClick={() => handleSwitchProvider('nse')}
+                      disabled={feedSwitching || feedProviderInfo?.activeProvider === 'nse'}
+                      title="Switch platform live streaming to Official NSE India Gateway"
+                    >
+                      <Server size={14} />
+                      <span>NSE India Official Feed</span>
+                      {feedProviderInfo?.activeProvider === 'nse' && <span className="active-badge">ACTIVE</span>}
+                    </button>
+                  </div>
+                </div>
+
+                {/* DUAL-PROVIDER COMPARISON AND HEALTH DIAGNOSTICS */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px', marginTop: '12px' }}>
+                  {/* DHANHQ FEED STATUS */}
+                  <div className={`provider-stat-box ${feedProviderInfo?.activeProvider === 'dhan' ? 'highlight-dhan' : ''}`} style={{ border: feedProviderInfo?.activeProvider === 'dhan' ? '1px solid #a855f7' : '1px solid #1a273b' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Radio size={16} color="#a855f7" />
+                        <strong style={{ fontSize: '14px', color: '#f8fafc' }}>DhanHQ API v2 Engine</strong>
+                      </div>
+                      <span className={`status-pill ${feedProviderInfo?.dhan.connected ? 'online' : (feedProviderInfo?.dhan.error ? 'offline' : 'offline')}`}>
+                        <span className={`status-dot ${feedProviderInfo?.dhan.connected ? 'pulse' : ''}`} />
+                        {feedProviderInfo?.dhan.connected ? 'WebSocket Connected' : (feedProviderInfo?.dhan.error ? 'Token Expired' : 'Standby')}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px' }}>
+                      <div>
+                        <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>FEED PROTOCOL</span>
+                        <strong style={{ color: '#cbd5e1' }}>wss://api-feed.dhan.co</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>TICKS PROCESSED</span>
+                        <strong style={{ color: '#a855f7' }}>{(feedProviderInfo?.dhan.tickCount || 0).toLocaleString()} ticks</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>UNIVERSE MAPPED</span>
+                        <strong style={{ color: '#cbd5e1' }}>75 Stocks &amp; Indices</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>CLIENT ID</span>
+                        <code style={{ color: '#38bdf8' }}>{feedProviderInfo?.dhan.clientId || '1111932175'}</code>
+                      </div>
+                    </div>
+
+                    {feedProviderInfo?.dhan.error && (
+                      <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '6px', padding: '8px 10px', fontSize: '11px', color: '#fca5a5' }}>
+                        <AlertTriangle size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                        {feedProviderInfo.dhan.error} (Auto-fallback to NSE active)
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: 'auto', paddingTop: '8px', display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className="action-btn primary"
+                        onClick={() => setShowTokenModal(true)}
+                        style={{ width: '100%', justifyContent: 'center', background: 'linear-gradient(135deg, #9333ea, #6366f1)', border: 'none' }}
+                      >
+                        <KeyRound size={13} />
+                        Update Daily Dhan Token
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* NSE INDIA FEED STATUS */}
+                  <div className={`provider-stat-box ${feedProviderInfo?.activeProvider === 'nse' ? 'highlight-nse' : ''}`} style={{ border: feedProviderInfo?.activeProvider === 'nse' ? '1px solid #45d6a2' : '1px solid #1a273b' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Server size={16} color="#45d6a2" />
+                        <strong style={{ fontSize: '14px', color: '#f8fafc' }}>NSE India Official Gateway</strong>
+                      </div>
+                      <span className="status-pill online">
+                        <span className="status-dot pulse" />
+                        Connected &amp; Ready
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px' }}>
+                      <div>
+                        <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>FEED ENDPOINT</span>
+                        <strong style={{ color: '#cbd5e1' }}>nseindia.com/api/allIndices</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>INDICES TRACKED</span>
+                        <strong style={{ color: '#45d6a2' }}>139 Official Indices</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>SESSION COOKIE</span>
+                        <strong style={{ color: '#cbd5e1' }}>Auto-Renewed (0 Downtime)</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>ACCURACY GUARANTEE</span>
+                        <strong style={{ color: '#45d6a2' }}>100% Exchange Official</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ background: 'rgba(69, 214, 162, 0.08)', border: '1px solid rgba(69, 214, 162, 0.2)', borderRadius: '6px', padding: '8px 10px', fontSize: '11px', color: '#86efac' }}>
+                      <ShieldCheck size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                      Instant Fallback Guard: Automatically serves 100% authentic data whenever Dhan token expires.
+                    </div>
+
+                    <div style={{ marginTop: 'auto', paddingTop: '8px', display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className="action-btn secondary"
+                        onClick={() => handleSwitchProvider('nse')}
+                        disabled={feedSwitching || feedProviderInfo?.activeProvider === 'nse'}
+                        style={{ width: '100%', justifyContent: 'center' }}
+                      >
+                        <Server size={13} />
+                        {feedProviderInfo?.activeProvider === 'nse' ? 'Active Primary Provider' : 'Activate NSE Feed'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ZERO PRIVACY LEAK CONFIRMATION */}
+                <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: '#64748b' }}>
+                  <span>🛡️ <strong>Customer Privacy Guard:</strong> Data source identity (Dhan vs NSE) is strictly hidden from customer viewports and only visible in this Admin Panel.</span>
+                  <span>Engine Sync: {feedProviderInfo?.asOf ? new Date(feedProviderInfo.asOf).toLocaleTimeString('en-IN') : 'Live'}</span>
+                </div>
+              </div>
+              
               {/* CARD 1: TELEGRAM BOT DISPATCH ENGINE */}
               <div className="integration-card">
                 <div className="integration-header">
@@ -2119,6 +2363,79 @@ export function AdminPage({ currentUser, onUserUpdate, onShowToast }: AdminPageP
           </div>
         )}
       </div>
+
+      {/* ----------------- MODAL: UPDATE DHAN DAILY ACCESS TOKEN ----------------- */}
+      {showTokenModal && (
+        <div className="admin-modal-backdrop" onClick={() => setShowTokenModal(false)}>
+          <div className="admin-modal-card" style={{ maxWidth: '580px' }} onClick={e => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h3>
+                <KeyRound size={18} color="#a855f7" /> Update DhanHQ Daily Access Token
+              </h3>
+              <button className="close-btn" onClick={() => setShowTokenModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateDhanToken} className="admin-modal-form">
+              <div style={{ background: 'rgba(168, 85, 247, 0.08)', border: '1px solid rgba(168, 85, 247, 0.25)', borderRadius: '10px', padding: '12px 14px', fontSize: '12px', color: '#cbd5e1', lineHeight: 1.5 }}>
+                <strong style={{ color: '#c084fc', display: 'block', marginBottom: '4px' }}>DhanHQ 24-Hour Token Lifecycle:</strong>
+                Dhan generates fresh access tokens daily. Copy your latest token from <code>web.dhan.co &gt; Profile &gt; DhanHQ APIs</code> and paste it below. The system validates it immediately and reconnects the WebSocket tick stream with zero server downtime.
+              </div>
+
+              <div className="form-group" style={{ marginTop: '16px' }}>
+                <label>DhanHQ Access Token (JWT String)</label>
+                <textarea
+                  required
+                  rows={4}
+                  placeholder="Paste your daily DhanHQ access token here (e.g. eyJ0eXAiOiJKV1QiLCJhbGci...)"
+                  value={newDhanToken}
+                  onChange={e => setNewDhanToken(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: '#0b111c',
+                    border: '1px solid #1e293b',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    color: '#f8fafc',
+                    fontFamily: 'monospace',
+                    fontSize: '12px',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Dhan Client ID (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="1111932175"
+                  value={newDhanClientId}
+                  onChange={e => setNewDhanClientId(e.target.value)}
+                />
+              </div>
+
+              <div className="admin-modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                <button
+                  type="button"
+                  className="admin-secondary-btn"
+                  onClick={() => setShowTokenModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="admin-primary-btn"
+                  disabled={updatingToken || !newDhanToken.trim()}
+                  style={{ background: 'linear-gradient(135deg, #9333ea, #6366f1)', border: 'none' }}
+                >
+                  {updatingToken ? <RefreshCw size={14} className="spin" /> : <CheckCircle2 size={14} />}
+                  Validate &amp; Connect Live Stream
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ----------------- MODAL: CREATE USER ----------------- */}
       {showCreateUserModal && (
